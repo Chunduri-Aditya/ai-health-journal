@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🧠 AI Health Journal</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .layout {
+      display: flex;
+      gap: 2rem;
+      width: 100%;
+      justify-content: center;
+      align-items: flex-start;
+      max-width: 1200px;
+      margin: auto;
+      position: relative;
+    }
+
+    .container {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 90vh;
+    }
+
+    #sidebar {
+      width: 280px;
+      padding: 1.5rem;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+      transition: transform 0.3s ease;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+
+    #sidebar.hidden {
+      display: none;
+    }
+
+    .dark-mode #sidebar {
+      background: #1f1f1f;
+      color: white;
+    }
+
+    #sidebar-toggle {
+      position: fixed;
+      left: 1.5rem;
+      top: 1.5rem;
+      z-index: 10;
+      background: #5c67f2;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    #sidebar-toggle:hover {
+      background: #4b54d1;
+    }
+
+    .message-entry {
+      background: #eef2f9;
+      padding: 0.5rem;
+      margin-bottom: 0.8rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .message-entry:hover {
+      background: #dde6f5;
+    }
+
+    .dark-mode .message-entry {
+      background: #2a2a2a;
+    }
+
+    .new-session-button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      background-color: #e74c3c;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="toggle-switch" onclick="toggleTheme()">🌃 Theme</div>
+  <div id="sidebar-toggle" onclick="toggleSidebar()">📜 History</div>
+
+  <div class="layout">
+    <!-- Main Journal Area -->
+    <div class="container">
+      <h1>🧠 AI Health Journal</h1>
+      <div id="insight-box"></div>
+      <textarea id="journal-entry" placeholder="Write your thoughts here..." autofocus></textarea>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+        <button onclick="submitEntry()">🦤 Analyze</button>
+        <button onclick="getPrompt()">✨ Prompt</button>
+        <button onclick="abortResponse()" id="stop-button" disabled>🛑 Stop</button>
+        <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+      </div>
+    </div>
+
+    <!-- Chat History Sidebar -->
+    <div id="sidebar" class="hidden">
+      <h2>Chat History</h2>
+      <ul id="history-list"></ul>
+      <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+    </div>
+  </div>
+
+  <script>
+    let controller;
+    let sessionHistory = [];
+
+    const entryBox = document.getElementById("journal-entry");
+    const insightBox = document.getElementById("insight-box");
+    const stopBtn = document.getElementById("stop-button");
+    const historyList = document.getElementById("history-list");
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      sidebar.classList.toggle("hidden");
+    }
+
+    async function submitEntry() {
+      const entry = entryBox.value.trim();
+      if (!entry) return;
+
+      stopBtn.disabled = false;
+      insightBox.innerHTML = '<span class="thinking">Thinking...</span>';
+
+      controller = new AbortController();
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entry }),
+          signal: controller.signal
+        });
+
+        const data = await response.json();
+        if (data.insight) {
+          revealTextSlowly(data.insight);
+          storeMessage(entry, data.insight);
+        } else {
+          insightBox.textContent = data.error || "Something went wrong.";
+        }
+      } catch {
+        insightBox.textContent = "Request canceled or failed.";
+      }
+
+      entryBox.value = "";
+      stopBtn.disabled = true;
+    }
+
+    function revealTextSlowly(text) {
+      insightBox.textContent = "";
+      const words = text.split(" ");
+      let i = 0;
+      const interval = setInterval(() => {
+        if (i >= words.length) return clearInterval(interval);
+        insightBox.textContent += words[i++] + " ";
+      }, 80);
+    }
+
+    function storeMessage(entry, insight) {
+      const title = entry.split(" ").slice(0, 5).join(" ") + (entry.split(" ").length > 5 ? "..." : "");
+      sessionHistory.unshift({ title, entry, insight });
+      renderHistory();
+    }
+
+    function renderHistory() {
+      historyList.innerHTML = "";
+      for (let item of sessionHistory) {
+        const li = document.createElement("li");
+        li.className = "message-entry";
+        li.textContent = item.title;
+        li.onclick = () => alert(`📝 ${item.entry}\n\n💡 ${item.insight}`);
+        historyList.appendChild(li);
+      }
+    }
+
+    function abortResponse() {
+      if (controller) controller.abort();
+      stopBtn.disabled = true;
+    }
+
+    async function getPrompt() {
+      try {
+        const res = await fetch("/prompt", { method: "POST" });
+        const data = await res.json();
+        if (data.prompt) {
+          entryBox.value = data.prompt;
+          entryBox.focus();
+        }
+      } catch {
+        alert("Failed to get a prompt.");
+      }
+    }
+
+    function newSession() {
+      sessionHistory = [];
+      historyList.innerHTML = "";
+      insightBox.textContent = "";
+      alert("🧹 New session started.");
+    }
+
+    // Submit on Enter key
+    entryBox.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitEntry();
+      }
+    });
+  </script>
+</body>
+</html>
