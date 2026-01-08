@@ -2,13 +2,12 @@
 
 **Privacy-first local LLM journaling assistant using Flask + Ollama. All processing happens on your machine—no data leaves your device.**
 
-[![Tests](https://github.com/Chunduri-Aditya/ai-health-journal/actions/workflows/tests.yml/badge.svg)](https://github.com/Chunduri-Aditya/ai-health-journal/actions/workflows/tests.yml)
 
 ## What It Does
 
 - **AI-powered insights**: Analyze journal entries with local LLMs (Phi-3, Mistral) via Ollama
 - **Multi-model quality pipeline**: Draft → Verify → Revise workflow reduces hallucinations
-- **RAG pipeline**: Local vector store (Chroma) for context retrieval from past entries
+- **RAG pipeline**: Local vector store (Chroma) or cloud (Pinecone) for context retrieval from past entries
 - **Therapeutic reflections**: Get emotional intelligence insights on your thoughts and patterns
 - **Session persistence**: History syncs between frontend and Flask session, persists across page refreshes
 - **Privacy-first**: Zero external API calls, no database, all processing on localhost
@@ -26,7 +25,8 @@
   ollama pull phi3:3.8b
   ollama pull samantha-mistral:7b
   ```
-- Optional: [Chroma](https://www.trychroma.com/) for RAG (installed via requirements.txt)
+- Optional: [Chroma](https://www.trychroma.com/) for local RAG (installed via requirements-optional.txt)
+- Optional: [Pinecone](https://www.pinecone.io/) for cloud RAG (requires API key, installed via requirements-optional.txt)
 
 ### Preflight Checks
 
@@ -49,13 +49,28 @@ python3 -c "import chromadb; print('chromadb ok')" || echo "⚠️  chromadb not
 
 ### Installation
 
+**Option 1: Using Makefile (Recommended)**
+
+```bash
+git clone https://github.com/Chunduri-Aditya/ai-health-journal.git
+cd ai-health-journal
+make setup  # Core dependencies only
+# OR
+make setup-full  # Core + optional dependencies (RAG, Pinecone, Whisper)
+```
+
+**Option 2: Manual Installation**
+
 ```bash
 git clone https://github.com/Chunduri-Aditya/ai-health-journal.git
 cd ai-health-journal
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-core.txt  # Core dependencies
+pip install -r requirements-optional.txt  # Optional: RAG, Pinecone, Whisper
 ```
+
+**Note:** For basic functionality, `requirements-core.txt` is sufficient. Install `requirements-optional.txt` for RAG (Chroma/Pinecone) and voice transcription features.
 
 ### Configuration (Optional)
 
@@ -72,6 +87,14 @@ PROMPT_MODEL=samantha-mistral:7b
 QUALITY_MODE_DEFAULT=false
 RETRIEVAL_ENABLED=true
 GROUNDEDNESS_THRESHOLD=0.75
+
+# Vector Store Backend (none/chroma/pinecone)
+VECTOR_BACKEND=chroma
+ALLOW_CLOUD_VECTORSTORE=false  # Set to true to enable Pinecone
+
+# Privacy Settings
+PRIVACY_MODE=balanced
+LOCAL_CACHE_MAX_ITEMS=2000
 ```
 
 ### Run
@@ -83,10 +106,36 @@ python app.py
 
 Visit `http://127.0.0.1:5000/` in your browser.
 
+**Alternative: Using Makefile**
+
+```bash
+make run  # Activates venv and runs app.py
+```
+
 **UI Features:**
 - **Model Selector**: Choose generator or prompt model
 - **Quality Mode Toggle**: Enable Draft → Verify → Revise pipeline for higher accuracy
 - **Fast Mode** (Quality Mode OFF): Single-model generation (backward compatible)
+
+---
+
+## Makefile Commands
+
+The project includes a `Makefile` with convenient commands:
+
+```bash
+make setup          # Create venv and install core dependencies
+make setup-full     # Create venv and install all dependencies (core + optional)
+make run            # Run the Flask application
+make verify         # Compile and verify code
+make eval-smoke     # Run smoke tests with mock LLM
+make eval-smoke-retrieval  # Run smoke tests with RAG enabled
+make report         # Generate evaluation report
+make demo           # Run demo script
+make deps-check     # Check dependency conflicts
+make distill-behavior  # Distill evaluation results to behavior patterns
+make clean          # Remove venv, cache, and artifacts
+```
 
 ---
 
@@ -118,16 +167,35 @@ A successful re-evaluation should show:
 
 ### Core Application
 - `app.py` - Main Flask app, defines `baseline_json` and `quality` modes
+- `config.py` - Configuration management (environment variables)
 - `llm_client.py` - LLM wrapper with temperature/model support
 - `generator_prompts.py` - Draft generation prompts
 - `verifier_prompts.py` - Verification prompts
-- `rag_store.py` - Local Chroma vector store
+- `rag_store.py` - Legacy RAG store wrapper (Chroma)
+- `vector_store/` - Modern vector store module with factory pattern
+  - `factory.py` - Vector store factory (Chroma/Pinecone/None)
+  - `base.py` - Base vector store interface
+  - `chroma_store.py` - Local Chroma implementation
+  - `pinecone_store.py` - Pinecone cloud implementation
 
 ### Evaluation Pipeline
 - `evals/run_evals.py` - Runs dataset prompts through chosen mode, writes results JSON
 - `evals/build_dpo_dataset.py` - Converts baseline + quality results into DPO pairs JSONL
 - `evals/debug_pair_deltas.py` - Prints per-case deltas to diagnose filtering
 - `evals/compare_before_after.py` - Compares before/after tuning results
+- `evals/summarize_results.py` - Summarizes evaluation results
+
+### Additional Modules
+- `chains/insight_chain.py` - LangChain integration for insights
+- `schemas/analysis.py` - Data schemas for analysis
+- `privacy/` - Privacy features
+  - `local_text_cache.py` - Local text caching
+  - `redact.py` - Text redaction utilities
+- `behavior/` - Behavior patterns and rules
+  - `loader.py` - Behavior pattern loader
+  - `rules.json` - Behavior rules
+  - `failure_patterns.json` - Failure pattern definitions
+- `scripts/benchmark.py` - Performance benchmarking
 
 ### Datasets
 - `evals/quick_tests.jsonl` - 6 quick test cases
@@ -136,7 +204,7 @@ A successful re-evaluation should show:
 
 ### Training
 - `train/train_dpo.py` - DPO LoRA training script
-- `train/TRAINING_RUNBOOK.md` - Complete training guide (RTX + Mac)
+- `train/requirements.txt` - Training-specific dependencies
 - `train/dpo_pairs_*.jsonl` - Generated preference pairs
 
 ### Results
@@ -158,7 +226,11 @@ python3 -m pip install -U pip
 ### 2. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+# Core dependencies (required)
+pip install -r requirements-core.txt
+
+# Optional dependencies (for RAG, Pinecone, Whisper)
+pip install -r requirements-optional.txt
 ```
 
 **Sanity Check (Important if you saw Chroma/numpy weirdness):**
@@ -338,7 +410,7 @@ python evals/build_dpo_dataset.py \
 
 **3. Train using that JSONL:**
 
-See `train/TRAINING_RUNBOOK.md` for complete training instructions.
+See the training section below for complete training instructions.
 
 **Quick Start (Smoke Test):**
 
@@ -363,7 +435,7 @@ python train/train_dpo.py \
   --use_4bit
 ```
 
-**Note:** Training is optional. The system works well without fine-tuning. See `train/TRAINING_RUNBOOK.md` for RTX laptop and Mac (CPU fallback) instructions.
+**Note:** Training is optional. The system works well without fine-tuning. Training requires PyTorch and Hugging Face libraries (see `train/requirements.txt`).
 
 ---
 
@@ -378,18 +450,23 @@ You want a minimal, clean folder that:
 
 **Code:**
 - `app.py`
+- `config.py`
 - `llm_client.py`
 - `generator_prompts.py`
 - `verifier_prompts.py`
 - `rag_store.py`
+- `vector_store/` (modern vector store module)
+- `schemas/` (data schemas)
+- `chains/` (LangChain integrations)
 - `evals/run_evals.py`
 - `evals/build_dpo_dataset.py`
 - `evals/debug_pair_deltas.py`
 - `evals/compare_before_after.py`
+- `evals/summarize_results.py`
 
 **Prompts / Configs:**
 - Prompt files (already in code)
-- `.env.example` (if present)
+- `.env` (user configuration)
 
 **Data:**
 - `evals/quick_tests.jsonl` (input prompts)
@@ -401,11 +478,7 @@ You want a minimal, clean folder that:
 - `README.md` (this file)
 - `LICENSE` (recommended)
 - `.gitignore` (recommended)
-- `docs/ollama_adapter.md` (for training)
-- `train/TRAINING_RUNBOOK.md` (for training)
 
-**Tests:**
-- `tests/` (for verification)
 
 ### B) What to ARCHIVE (Not Delete) Unless You're Sure
 
@@ -426,14 +499,20 @@ mkdir -p clean_export
 # Copy only the essentials
 rsync -av --prune-empty-dirs \
   --include "app.py" \
+  --include "config.py" \
   --include "llm_client.py" \
   --include "generator_prompts.py" \
   --include "verifier_prompts.py" \
   --include "rag_store.py" \
+  --include "vector_store/" \
+  --include "schemas/" \
+  --include "chains/" \
   --include "README.md" \
   --include "LICENSE" \
   --include ".gitignore" \
-  --include "requirements.txt" \
+  --include "requirements-core.txt" \
+  --include "requirements-optional.txt" \
+  --include "Makefile" \
   --include "evals/" \
   --include "evals/run_evals.py" \
   --include "evals/build_dpo_dataset.py" \
@@ -444,10 +523,8 @@ rsync -av --prune-empty-dirs \
   --include "evals/results/***" \
   --include "train/" \
   --include "train/train_dpo.py" \
-  --include "train/TRAINING_RUNBOOK.md" \
+  --include "train/requirements.txt" \
   --include "train/dpo_pairs_*.jsonl" \
-  --include "docs/ollama_adapter.md" \
-  --include "tests/" \
   --include "templates/" \
   --include "static/" \
   --include "tools/" \
@@ -547,13 +624,7 @@ Baseline must be weaker, quality must be stronger, and ties should be resolved w
 
 Before deploying or merging changes, verify production readiness with these commands:
 
-### 1. Automated Tests
-```bash
-pytest -q
-```
-**Expected:** 22 passed, 1 skipped
-
-### 2. Evaluation Harness
+### 1. Evaluation Harness
 ```bash
 python evals/run_evals.py --dataset evals/quick_tests.jsonl --mode both
 ```
@@ -572,7 +643,7 @@ python evals/build_dpo_dataset.py --baseline_json "$BASE_JSON" --quality "$QUAL"
 ```
 **Expected:** Non-empty pairs file created with strict filtering applied
 
-**Full acceptance criteria:** See `docs/ACCEPTANCE_CRITERIA.md`
+**Full acceptance criteria:** Evals show high quality scores, and DPO pairs are generated successfully.
 
 ---
 
@@ -635,24 +706,6 @@ When `quality_mode: true` or `baseline_json_mode: true`, `/analyze` returns stru
 
 ---
 
-## Testing
-
-See `docs/testing.md` for detailed testing instructions.
-
-**Quick Test:**
-```bash
-pytest -q
-# Expected: 22 passed, 1 skipped
-```
-
-**Manual E2E Tests:**
-- Flow A (Baseline): Start app, submit entry, refresh, new session
-- Flow B (Quality Mode): Toggle quality ON, submit entry, confirm structured JSON
-- Flow C (AbortController): Submit entry, click Stop
-- Flow D (RAG On/Off): Enable retrieval, submit related entries
-
----
-
 ## Privacy & Security
 
 - ✅ **Local-only**: All processing on localhost (Ollama + same-origin Flask)
@@ -682,22 +735,54 @@ python scripts/benchmark.py
 ```
 ai-health-journal/
 ├── app.py                 # Main Flask application
+├── config.py             # Configuration management
 ├── llm_client.py          # Ollama client wrapper
-├── generator_prompts.py    # Draft generation prompts
-├── verifier_prompts.py     # Verification prompts
-├── rag_store.py           # Chroma vector store
+├── generator_prompts.py   # Draft generation prompts
+├── verifier_prompts.py    # Verification prompts
+├── rag_store.py           # Legacy RAG store (Chroma)
+├── version.py             # Version information
+├── chains/                # LangChain integrations
+│   └── insight_chain.py   # LangChain insight chain
+├── schemas/               # Data schemas
+│   └── analysis.py        # Analysis schema definitions
+├── privacy/               # Privacy features
+│   ├── local_text_cache.py # Local text caching
+│   └── redact.py          # Text redaction
+├── behavior/              # Behavior patterns
+│   ├── loader.py          # Pattern loader
+│   ├── rules.json         # Behavior rules
+│   └── failure_patterns.json # Failure patterns
+├── vector_store/          # Vector store module
+│   ├── factory.py         # Vector store factory
+│   ├── base.py            # Base interface
+│   ├── chroma_store.py    # Chroma implementation
+│   └── pinecone_store.py  # Pinecone implementation
 ├── evals/                 # Evaluation pipeline
 │   ├── run_evals.py       # Run evaluations
 │   ├── build_dpo_dataset.py  # Build DPO pairs
 │   ├── debug_pair_deltas.py # Debug deltas
 │   ├── compare_before_after.py # Compare results
+│   ├── summarize_results.py  # Summarize results
 │   ├── quick_tests.jsonl  # Quick test dataset
+│   ├── dataset.jsonl      # Standard dataset
 │   └── hard_negatives_hn_v2.jsonl  # Hard negatives dataset
 ├── train/                 # DPO training
 │   ├── train_dpo.py       # Training script
-│   └── TRAINING_RUNBOOK.md # Training guide
-├── tests/                 # Automated tests
-└── docs/                  # Documentation
+│   ├── requirements.txt   # Training dependencies
+│   └── dpo_pairs_*.jsonl  # Generated pairs
+├── scripts/               # Utility scripts
+│   └── benchmark.py       # Performance benchmarks
+├── tools/                 # Development tools
+│   ├── demo_run.sh        # Demo script
+│   ├── distill_evals_to_behavior.py # Behavior distillation
+│   └── set_model_env.sh   # Model environment setup
+├── templates/             # HTML templates
+│   └── index.html         # Main UI
+├── static/                # Static assets
+│   └── style.css          # Stylesheet
+├── requirements-core.txt  # Core dependencies
+├── requirements-optional.txt # Optional dependencies
+└── Makefile               # Build automation
 ```
 
 ---
@@ -722,9 +807,8 @@ ai-health-journal/
 Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
-3. Run tests: `pytest -q`
-4. Run evals: `python evals/run_evals.py --dataset evals/quick_tests.jsonl --mode both`
-5. Submit a pull request
+3. Run evals: `python evals/run_evals.py --dataset evals/quick_tests.jsonl --mode both`
+4. Submit a pull request
 
 ---
 
