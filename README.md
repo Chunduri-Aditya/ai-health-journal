@@ -128,11 +128,9 @@ make run  # Activates venv and runs app.py
 
 ### Screenshots / Demo
 
-> **Note:** Add a screenshot or GIF of the UI here to showcase the interface. Example:
-> 
-> ![AI Health Journal Interface](docs/screenshot.png)
-> 
-> *The journaling interface with dark mode, history sidebar, and quality mode toggle.*
+![AI Health Journal Interface](docs/screenshot.png)
+
+*The journaling interface showing dark mode, model selector, quality mode toggle with info tooltip, AI-generated insights, and action buttons. The interface provides a clean, modern design for privacy-first journaling with local LLM analysis.*
 
 ---
 
