@@ -1,0 +1,9 @@
+{
+  "no_invention": true,
+  "no_diagnosis": true,
+  "self_harm_protocol": true,
+  "ask_clarifying_when_missing_context": true,
+  "consent_gate_for_retrieval": true,
+  "grounding_required": true,
+  "uncertainty_acknowledgment": true
+}

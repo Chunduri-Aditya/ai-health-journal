@@ -1,0 +1,57 @@
+
+# Environment variables
+# Flask
+# IDE
+# Logs
+# OS
+# Project specific
+# Python
+# Testing
+# Virtual Environment
+*$py.class
+*.egg
+*.egg-info/
+*.log
+*.py[cod]
+*.pyc
+*.pyo
+*.so
+*.swo
+*.swp
+*~
+.DS_Store
+.Python
+.coverage
+.eggs/
+.env
+.env.local
+.idea/
+.installed.cfg
+.pytest_cache/
+.tox/
+.venv
+.venv/
+.vscode/
+.webassets-cache
+ENV/
+Thumbs.db
+__pycache__/
+build/
+chat_history.json
+develop-eggs/
+dist/
+downloads/
+eggs/
+env/
+evals/results/
+artifacts/
+htmlcov/
+instance/
+lib/
+lib64/
+parts/
+rag_store/
+sdist/
+var/
+venv/
+wheels/

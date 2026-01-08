@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🧠 AI Health Journal</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .layout {
+      display: flex;
+      gap: 2rem;
+      width: 100%;
+      justify-content: center;
+      align-items: flex-start;
+      max-width: 1200px;
+      margin: auto;
+      position: relative;
+    }
+
+    .container {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 90vh;
+    }
+
+    #sidebar {
+      width: 280px;
+      padding: 1.5rem;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+      transition: transform 0.3s ease;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+
+    #sidebar.hidden {
+      display: none;
+    }
+
+    .dark-mode #sidebar {
+      background: #1f1f1f;
+      color: white;
+    }
+
+    #sidebar-toggle {
+      position: fixed;
+      left: 1.5rem;
+      top: 1.5rem;
+      z-index: 10;
+      background: #5c67f2;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    #sidebar-toggle:hover {
+      background: #4b54d1;
+    }
+
+    .message-entry {
+      background: #eef2f9;
+      padding: 0.5rem;
+      margin-bottom: 0.8rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .message-entry:hover {
+      background: #dde6f5;
+    }
+
+    .dark-mode .message-entry {
+      background: #2a2a2a;
+    }
+
+    .new-session-button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      background-color: #e74c3c;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="toggle-switch" onclick="toggleTheme()">🌃 Theme</div>
+  <div id="sidebar-toggle" onclick="toggleSidebar()">📜 History</div>
+
+  <div class="layout">
+    <!-- Main Journal Area -->
+    <div class="container">
+      <h1>🧠 AI Health Journal</h1>
+      
+      <!-- Model and Quality Controls -->
+      <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center;">
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+          <span>Model:</span>
+          <select id="model-selector" style="padding: 0.5rem; border-radius: 6px; border: 1px solid #d0d7de;">
+            <option value="phi3:3.8b">phi3:3.8b (Generator)</option>
+            <option value="samantha-mistral:7b">samantha-mistral:7b (Prompt)</option>
+          </select>
+        </label>
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+          <input type="checkbox" id="quality-mode-toggle" checked>
+          <span>Quality Mode (Verify + Revise)</span>
+        </label>
+      </div>
+      
+      <div id="insight-box"></div>
+      <div id="sources-container" style="margin-top:0.75rem; display:none;">
+        <button id="sources-toggle" onclick="toggleSources()" style="font-size:0.85rem;">
+          🔍 Show sources
+        </button>
+        <div id="sources-list" style="margin-top:0.5rem; font-size:0.85rem;"></div>
+      </div>
+      <textarea id="journal-entry" placeholder="Write your thoughts here..." autofocus></textarea>
+
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0 1rem 0; flex-wrap: wrap;">
+        <button id="record-button" onclick="toggleRecording()" style="background-color:#42b983;color:#fff;">
+          🎙️ Record
+        </button>
+        <span id="record-status" style="font-size:0.9rem; opacity:0.8;"></span>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+        <button onclick="submitEntry()">🦤 Analyze</button>
+        <button onclick="getPrompt()">✨ Prompt</button>
+        <button onclick="abortResponse()" id="stop-button" disabled>🛑 Stop</button>
+        <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+      </div>
+    </div>
+
+    <!-- Chat History Sidebar -->
+    <div id="sidebar" class="hidden">
+      <h2>Chat History</h2>
+      <ul id="history-list"></ul>
+      <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+    </div>
+  </div>
+
+  <script>
+    let controller;
+    let sessionHistory = [];
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    const entryBox = document.getElementById("journal-entry");
+    const insightBox = document.getElementById("insight-box");
+    const stopBtn = document.getElementById("stop-button");
+    const historyList = document.getElementById("history-list");
+    const recordBtn = document.getElementById("record-button");
+    const recordStatus = document.getElementById("record-status");
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      sidebar.classList.toggle("hidden");
+    }
+
+    async function submitEntry() {
+      const entry = entryBox.value.trim();
+      if (!entry) return;
+
+      const model = document.getElementById("model-selector").value;
+      const qualityMode = document.getElementById("quality-mode-toggle").checked;
+
+      stopBtn.disabled = false;
+      insightBox.innerHTML = '<span class="thinking">Thinking' + (qualityMode ? ' (Quality Mode)...' : '...') + '</span>';
+
+      controller = new AbortController();
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            entry,
+            model,
+            quality_mode: qualityMode
+          }),
+          signal: controller.signal
+        });
+
+        const data = await response.json();
+        if (data.insight) {
+          revealTextSlowly(data.insight);
+          if (data.analysis) {
+            renderSources(data.analysis);
+          } else {
+            renderSources(null);
+          }
+          storeMessage(entry, data.insight);
+        } else {
+          insightBox.textContent = data.error || "Something went wrong.";
+          renderSources(null);
+        }
+      } catch {
+        insightBox.textContent = "Request canceled or failed.";
+      }
+
+      entryBox.value = "";
+      stopBtn.disabled = true;
+    }
+    
+    // Load available models on page load
+    async function loadModels() {
+      try {
+        const response = await fetch("/models");
+        const data = await response.json();
+        const selector = document.getElementById("model-selector");
+        
+        // Update options if needed
+        if (data.generator) {
+          selector.innerHTML = `<option value="${data.generator}">${data.generator} (Generator)</option>`;
+          if (data.prompt && data.prompt !== data.generator) {
+            selector.innerHTML += `<option value="${data.prompt}">${data.prompt} (Prompt)</option>`;
+          }
+        }
+      } catch (error) {
+        // Silently fail - use defaults
+      }
+    }
+    
+    window.addEventListener("load", () => {
+      loadSessionHistory();
+      loadModels();
+    });
+
+    function revealTextSlowly(text) {
+      insightBox.textContent = "";
+      const words = text.split(" ");
+      let i = 0;
+      const interval = setInterval(() => {
+        if (i >= words.length) return clearInterval(interval);
+        insightBox.textContent += words[i++] + " ";
+      }, 80);
+    }
+
+    function storeMessage(entry, insight) {
+      const title = entry.split(" ").slice(0, 5).join(" ") + (entry.split(" ").length > 5 ? "..." : "");
+      sessionHistory.unshift({ title, entry, insight });
+      renderHistory();
+    }
+
+    function renderHistory() {
+      historyList.innerHTML = "";
+      for (let item of sessionHistory) {
+        const li = document.createElement("li");
+        li.className = "message-entry";
+        li.textContent = item.title;
+        li.onclick = () => alert(`📝 ${item.entry}\n\n💡 ${item.insight}`);
+        historyList.appendChild(li);
+      }
+    }
+
+    function abortResponse() {
+      if (controller) controller.abort();
+      stopBtn.disabled = true;
+    }
+
+    async function getPrompt() {
+      try {
+        const res = await fetch("/prompt", { method: "POST" });
+        const data = await res.json();
+        if (data.prompt) {
+          entryBox.value = data.prompt;
+          entryBox.focus();
+        }
+      } catch {
+        alert("Failed to get a prompt.");
+      }
+    }
+
+    async function loadSessionHistory() {
+      try {
+        const response = await fetch("/session/history");
+        const backendHistory = await response.json();
+        if (Array.isArray(backendHistory) && backendHistory.length > 0) {
+          sessionHistory = [];
+          for (let item of backendHistory) {
+            const title = item.entry.split(" ").slice(0, 5).join(" ") + (item.entry.split(" ").length > 5 ? "..." : "");
+            sessionHistory.push({ title, entry: item.entry, insight: item.response });
+          }
+          renderHistory();
+        }
+      } catch (error) {
+        // Silently fail if session history can't be loaded
+      }
+    }
+
+    async function newSession() {
+      try {
+        await fetch("/session/reset", { method: "POST" });
+      } catch (error) {
+        // Continue even if reset fails
+      }
+      sessionHistory = [];
+      historyList.innerHTML = "";
+      insightBox.textContent = "";
+      alert("🧹 New session started.");
+    }
+
+
+    async function toggleRecording() {
+      if (isRecording) {
+        // Stop recording
+        isRecording = false;
+        recordBtn.textContent = "🎙️ Record";
+        recordStatus.textContent = "";
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Microphone access is not supported in this browser.");
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          stream.getTracks().forEach((t) => t.stop());
+          await sendForTranscription(blob);
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.textContent = "⏹️ Stop";
+        recordStatus.textContent = "Recording... speak freely, then click Stop.";
+      } catch (err) {
+        console.error(err);
+        alert("Could not access microphone.");
+      }
+    }
+
+    async function sendForTranscription(blob) {
+      recordStatus.textContent = "Transcribing...";
+      try {
+        const formData = new FormData();
+        formData.append("audio", blob, "journal.webm");
+
+        const res = await fetch("/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (res.ok && data.text) {
+          const current = entryBox.value.trim();
+          entryBox.value = (current ? current + "\n" : "") + data.text;
+          recordStatus.textContent = `Transcribed (${data.language}). You can edit before analyzing.`;
+        } else {
+          recordStatus.textContent = "Transcription failed.";
+        }
+      } catch (err) {
+        console.error(err);
+        recordStatus.textContent = "Transcription failed.";
+      }
+    }
+
+    function renderSources(analysis) {
+      const container = document.getElementById("sources-container");
+      const list = document.getElementById("sources-list");
+      const toggle = document.getElementById("sources-toggle");
+      if (!analysis || !Array.isArray(analysis.grounding_sources) || analysis.grounding_sources.length === 0) {
+        container.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+      const mode = analysis.grounding_mode || "local_chroma";
+      const label = mode === "pinecone"
+        ? "Pinecone (vectors; text from redacted local cache)"
+        : "Local Chroma";
+      let html = `<div style="opacity:0.8;margin-bottom:4px;">Sources (${label}):</div>`;
+      analysis.grounding_sources.forEach((s, idx) => {
+        const score = typeof s.score === "number" ? s.score.toFixed(3) : s.score;
+        html += `<div>[#${idx + 1}] score=${score} ts=${s.ts || "n/a"} – ${s.preview}</div>`;
+      });
+      list.innerHTML = html;
+      container.style.display = "block";
+      list.style.display = "none";
+      toggle.textContent = "🔍 Show sources";
+    }
+
+    function toggleSources() {
+      const list = document.getElementById("sources-list");
+      const toggle = document.getElementById("sources-toggle");
+      const visible = list.style.display !== "none";
+      list.style.display = visible ? "none" : "block";
+      toggle.textContent = visible ? "🔍 Show sources" : "🔍 Hide sources";
+    }
+
+
+    // Submit on Enter key
+    entryBox.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitEntry();
+      }
+    });
+  </script>
+</body>
+</html>

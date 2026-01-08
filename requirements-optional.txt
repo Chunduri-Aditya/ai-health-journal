@@ -1,0 +1,26 @@
+# Optional dependencies for full features
+# Install after requirements-core.txt: pip install -r requirements-optional.txt
+# Or use: make setup-full
+
+# Vector store backends (retrieval features)
+# Local vector store (Chroma)
+chromadb>=0.4.0
+
+# Pinecone client + LangChain integration
+pinecone-client>=3.0.0
+langchain-pinecone==0.2.13
+
+# Local embeddings for Pinecone (privacy-aware)
+# Note: pulls in torch, transformers, sentencepiece, etc.
+sentence-transformers>=2.7.0
+
+# Whisper voice transcription
+# Note: pulls in ctranslate2, av, etc.
+faster-whisper>=1.0.0
+
+# Multipart form handling (for /transcribe)
+python-multipart>=0.0.9
+
+# Note: torch, onnxruntime, and other heavy deps are installed
+# as transitive dependencies of sentence-transformers and faster-whisper.
+# If you only need core features, skip this file.
