@@ -5,95 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🧠 AI Health Journal</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <style>
-    .layout {
-      display: flex;
-      gap: 2rem;
-      width: 100%;
-      justify-content: center;
-      align-items: flex-start;
-      max-width: 1200px;
-      margin: auto;
-      position: relative;
-    }
-
-    .container {
-      flex: 1;
-      overflow-y: auto;
-      max-height: 90vh;
-    }
-
-    #sidebar {
-      width: 280px;
-      padding: 1.5rem;
-      background: #ffffff;
-      border-radius: 16px;
-      box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
-      transition: transform 0.3s ease;
-      max-height: 85vh;
-      overflow-y: auto;
-    }
-
-    #sidebar.hidden {
-      display: none;
-    }
-
-    .dark-mode #sidebar {
-      background: #1f1f1f;
-      color: white;
-    }
-
-    #sidebar-toggle {
-      position: fixed;
-      left: 1.5rem;
-      top: 1.5rem;
-      z-index: 10;
-      background: #5c67f2;
-      color: white;
-      padding: 0.5rem 1rem;
-      border-radius: 12px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-
-    #sidebar-toggle:hover {
-      background: #4b54d1;
-    }
-
-    .message-entry {
-      background: #eef2f9;
-      padding: 0.5rem;
-      margin-bottom: 0.8rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .message-entry:hover {
-      background: #dde6f5;
-    }
-
-    .dark-mode .message-entry {
-      background: #2a2a2a;
-    }
-
-    .new-session-button {
-      margin-top: 1rem;
-      padding: 0.5rem 1rem;
-      font-size: 0.9rem;
-      background-color: #e74c3c;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-  </style>
 </head>
 <body>
-  <div class="toggle-switch" onclick="toggleTheme()">🌃 Theme</div>
-  <div id="sidebar-toggle" onclick="toggleSidebar()">📜 History</div>
+  <div class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode">🌃 Theme</div>
+  <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history">📜 History</div>
 
   <div class="layout">
     <!-- Main Journal Area -->
@@ -101,49 +16,60 @@
       <h1>🧠 AI Health Journal</h1>
       
       <!-- Model and Quality Controls -->
-      <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center;">
-        <label style="display: flex; align-items: center; gap: 0.5rem;">
-          <span>Model:</span>
-          <select id="model-selector" style="padding: 0.5rem; border-radius: 6px; border: 1px solid #d0d7de;">
+      <div class="controls-group">
+        <div class="control-item">
+          <label for="model-selector">Model:</label>
+          <select id="model-selector">
             <option value="phi3:3.8b">phi3:3.8b (Generator)</option>
             <option value="samantha-mistral:7b">samantha-mistral:7b (Prompt)</option>
           </select>
-        </label>
-        <label style="display: flex; align-items: center; gap: 0.5rem;">
+        </div>
+        <div class="control-item" style="position: relative;">
           <input type="checkbox" id="quality-mode-toggle" checked>
-          <span>Quality Mode (Verify + Revise)</span>
-        </label>
+          <label for="quality-mode-toggle">Quality Mode (Verify + Revise)</label>
+          <span class="info-icon" title="Click for details" onclick="toggleQualityInfo()">ℹ️</span>
+          <div id="quality-info" class="quality-info-tooltip" style="display: none;">
+            <div class="tooltip-content">
+              <strong>Quality Mode:</strong>
+              <ul>
+                <li><strong>✅ ON (Checked):</strong> Uses Draft → Verify → Revise pipeline for higher accuracy. Best for important entries, detailed analysis, or when accuracy matters most. <em>Slightly slower but more reliable.</em></li>
+                <li><strong>⚡ OFF (Unchecked):</strong> Single-model generation for faster responses. Best for quick drafts, casual journaling, or when speed is priority. <em>Faster but less refined.</em></li>
+              </ul>
+              <button onclick="toggleQualityInfo()" class="close-tooltip">Got it</button>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div id="insight-box"></div>
-      <div id="sources-container" style="margin-top:0.75rem; display:none;">
-        <button id="sources-toggle" onclick="toggleSources()" style="font-size:0.85rem;">
+      <div id="sources-container" style="display:none;">
+        <button id="sources-toggle" onclick="toggleSources()">
           🔍 Show sources
         </button>
-        <div id="sources-list" style="margin-top:0.5rem; font-size:0.85rem;"></div>
+        <div id="sources-list"></div>
       </div>
       <textarea id="journal-entry" placeholder="Write your thoughts here..." autofocus></textarea>
 
-      <div style="display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0 1rem 0; flex-wrap: wrap;">
-        <button id="record-button" onclick="toggleRecording()" style="background-color:#42b983;color:#fff;">
+      <div class="record-controls">
+        <button id="record-button" onclick="toggleRecording()" class="btn-success">
           🎙️ Record
         </button>
-        <span id="record-status" style="font-size:0.9rem; opacity:0.8;"></span>
+        <span id="record-status"></span>
       </div>
 
-      <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-        <button onclick="submitEntry()">🦤 Analyze</button>
-        <button onclick="getPrompt()">✨ Prompt</button>
-        <button onclick="abortResponse()" id="stop-button" disabled>🛑 Stop</button>
-        <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+      <div class="button-group">
+        <button onclick="submitEntry()" class="btn-primary">🦤 Analyze</button>
+        <button onclick="getPrompt()" class="btn-secondary">✨ Prompt</button>
+        <button onclick="abortResponse()" id="stop-button" class="btn-secondary" disabled>🛑 Stop</button>
+        <button onclick="newSession()" class="btn-danger">🧹 New Session</button>
       </div>
     </div>
 
     <!-- Chat History Sidebar -->
     <div id="sidebar" class="hidden">
-      <h2>Chat History</h2>
+      <h2>📜 Chat History</h2>
       <ul id="history-list"></ul>
-      <button onclick="newSession()" class="new-session-button">🧹 New Session</button>
+      <button onclick="newSession()" class="btn-danger" style="width: 100%; margin-top: 1rem;">🧹 New Session</button>
     </div>
   </div>
 
@@ -420,6 +346,20 @@
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         submitEntry();
+      }
+    });
+
+    function toggleQualityInfo() {
+      const info = document.getElementById("quality-info");
+      info.style.display = info.style.display === "none" ? "block" : "none";
+    }
+
+    // Close tooltip when clicking outside
+    document.addEventListener("click", function(event) {
+      const info = document.getElementById("quality-info");
+      const icon = document.querySelector(".info-icon");
+      if (info && !info.contains(event.target) && !icon.contains(event.target)) {
+        info.style.display = "none";
       }
     });
   </script>
