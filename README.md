@@ -2,6 +2,13 @@
 
 **Privacy-first local LLM journaling assistant using Flask + Ollama. All processing happens on your machine—no data leaves your device.**
 
+## TL;DR
+
+A local-only journaling assistant that analyzes your entries using local LLMs (Ollama). Runs fully on localhost by default—no external APIs, no cloud storage. Optional cloud vector store (Pinecone) is gated and off by default. Includes a reproducible DPO fine-tuning pipeline for improving model groundedness.
+
+**Quick links:** [Quickstart](#quickstart) | [Evaluation Pipeline](#dpo-dataset-builder-baseline-vs-quality--reproducible-eval--pairing--training) | [Architecture](#architecture) | [Common Issues](#common-issues) | [Privacy & Security](#privacy--security)
+
+---
 
 ## What It Does
 
@@ -10,7 +17,7 @@
 - **RAG pipeline**: Local vector store (Chroma) or cloud (Pinecone) for context retrieval from past entries
 - **Therapeutic reflections**: Get emotional intelligence insights on your thoughts and patterns
 - **Session persistence**: History syncs between frontend and Flask session, persists across page refreshes
-- **Privacy-first**: Zero external API calls, no database, all processing on localhost
+- **Privacy-first by default**: Runs fully on localhost (Flask + Ollama). Optional cloud vector store (Pinecone) is off by default and requires explicit opt-in.
 - **Modern UI**: Typewriter animations, dark mode, collapsible history sidebar, request cancellation, model selector, quality mode toggle
 - **DPO Fine-tuning Pipeline**: Build preference datasets and train LoRA adapters to improve groundedness
 
@@ -72,6 +79,8 @@ pip install -r requirements-optional.txt  # Optional: RAG, Pinecone, Whisper
 
 **Note:** For basic functionality, `requirements-core.txt` is sufficient. Install `requirements-optional.txt` for RAG (Chroma/Pinecone) and voice transcription features.
 
+**Note on `requirements.txt`:** This file exists but is legacy. Use `requirements-core.txt` and `requirements-optional.txt` instead for better dependency management.
+
 ### Configuration (Optional)
 
 Create a `.env` file to customize models and features:
@@ -116,6 +125,14 @@ make run  # Activates venv and runs app.py
 - **Model Selector**: Choose generator or prompt model
 - **Quality Mode Toggle**: Enable Draft → Verify → Revise pipeline for higher accuracy
 - **Fast Mode** (Quality Mode OFF): Single-model generation (backward compatible)
+
+### Screenshots / Demo
+
+> **Note:** Add a screenshot or GIF of the UI here to showcase the interface. Example:
+> 
+> ![AI Health Journal Interface](docs/screenshot.png)
+> 
+> *The journaling interface with dark mode, history sidebar, and quality mode toggle.*
 
 ---
 
@@ -172,6 +189,7 @@ A successful re-evaluation should show:
 - `generator_prompts.py` - Draft generation prompts
 - `verifier_prompts.py` - Verification prompts
 - `rag_store.py` - Legacy RAG store wrapper (Chroma)
+- `version.py` - Version information
 - `vector_store/` - Modern vector store module with factory pattern
   - `factory.py` - Vector store factory (Chroma/Pinecone/None)
   - `base.py` - Base vector store interface
@@ -195,17 +213,26 @@ A successful re-evaluation should show:
   - `loader.py` - Behavior pattern loader
   - `rules.json` - Behavior rules
   - `failure_patterns.json` - Failure pattern definitions
+  - `few_shot.jsonl` - Few-shot examples for behavior patterns
 - `scripts/benchmark.py` - Performance benchmarking
+- `tools/` - Development and utility tools
+  - `demo_run.sh` - Demo script for testing endpoints
+  - `distill_evals_to_behavior.py` - Distill evaluation results to behavior patterns
+  - `pinecone_bootstrap.py` - Pinecone index setup utility
+  - `set_model_env.sh` - Helper script to set model environment variables
 
 ### Datasets
 - `evals/quick_tests.jsonl` - 6 quick test cases
-- `evals/hard_negatives_hn_v2.jsonl` - 51 hard negative cases (recommended)
 - `evals/dataset.jsonl` - 25 test cases
+- `evals/hard_negatives.jsonl` - Hard negative cases
+- `evals/hard_negatives_hn_v2.jsonl` - 51 hard negative cases v2 (recommended)
+- `evals/hard_negatives_hn_v3.jsonl` - Hard negative cases v3
 
 ### Training
 - `train/train_dpo.py` - DPO LoRA training script
 - `train/requirements.txt` - Training-specific dependencies
 - `train/dpo_pairs_*.jsonl` - Generated preference pairs
+- `train/dpo_pairs_*.sample.jsonl` - Sample subsets of preference pairs
 
 ### Results
 - `evals/results/` - Output JSON files for baseline and quality runs
@@ -244,6 +271,96 @@ If something fails, pin numpy (many stacks still prefer <2.0):
 ```bash
 pip install "numpy<2.0"
 ```
+
+---
+
+## Common Issues
+
+### Ollama Not Running
+
+**Symptom:** Error message "🛑 The AI assistant is offline. Please try again later."
+
+**Fix:**
+```bash
+# Start Ollama service
+ollama serve
+
+# In another terminal, verify it's running
+curl http://localhost:11434
+```
+
+### Model Not Pulled
+
+**Symptom:** Model errors or "model not found" messages.
+
+**Fix:**
+```bash
+# Pull required models
+ollama pull phi3:3.8b
+ollama pull samantha-mistral:7b
+
+# Verify models are available
+ollama list
+```
+
+### Chroma Import Fails Due to NumPy
+
+**Symptom:** `ImportError` when importing chromadb, often related to numpy version conflicts.
+
+**Fix:**
+```bash
+# Pin numpy to compatible version
+pip install "numpy<2.0" "chromadb>=0.4.0"
+
+# Or reinstall chromadb
+pip uninstall chromadb
+pip install chromadb
+```
+
+**Note:** If Chroma import fails, RAG will be automatically disabled. The app will function normally without RAG.
+
+### Pinecone Gate Disabled
+
+**Symptom:** Error when trying to use Pinecone: "cloud_vectorstore_not_enabled"
+
+**Fix:**
+```bash
+# Set environment variable to enable Pinecone
+export ALLOW_CLOUD_VECTORSTORE=true
+
+# Also ensure you have Pinecone API key set
+export PINECONE_API_KEY=your-api-key-here
+
+# Or add to .env file:
+# ALLOW_CLOUD_VECTORSTORE=true
+# PINECONE_API_KEY=your-api-key-here
+```
+
+### Port Already in Use
+
+**Symptom:** `Address already in use` error when starting Flask app.
+
+**Fix:**
+```bash
+# Find process using port 5000
+lsof -i :5000
+
+# Kill the process (replace PID with actual process ID)
+kill -9 PID
+
+# Or use a different port
+export FLASK_RUN_PORT=5001
+python app.py
+```
+
+### Session Not Persisting
+
+**Symptom:** Chat history disappears on page refresh.
+
+**Fix:**
+- Ensure cookies are enabled in your browser
+- Check browser console for errors
+- Verify Flask secret key is set (app.py generates one automatically)
 
 ---
 
@@ -455,9 +572,14 @@ You want a minimal, clean folder that:
 - `generator_prompts.py`
 - `verifier_prompts.py`
 - `rag_store.py`
+- `version.py`
 - `vector_store/` (modern vector store module)
 - `schemas/` (data schemas)
 - `chains/` (LangChain integrations)
+- `behavior/` (behavior patterns and rules)
+- `privacy/` (privacy features)
+- `scripts/` (utility scripts)
+- `tools/` (development tools)
 - `evals/run_evals.py`
 - `evals/build_dpo_dataset.py`
 - `evals/debug_pair_deltas.py`
@@ -470,7 +592,8 @@ You want a minimal, clean folder that:
 
 **Data:**
 - `evals/quick_tests.jsonl` (input prompts)
-- `evals/hard_negatives_hn_v2.jsonl` (input prompts)
+- `evals/dataset.jsonl` (input prompts)
+- `evals/hard_negatives_hn_v2.jsonl` (input prompts - recommended)
 - `evals/results/` (KEEP your baseline + quality JSON runs)
 - `train/` (DPO pairs JSONL output)
 
@@ -504,9 +627,14 @@ rsync -av --prune-empty-dirs \
   --include "generator_prompts.py" \
   --include "verifier_prompts.py" \
   --include "rag_store.py" \
+  --include "version.py" \
   --include "vector_store/" \
   --include "schemas/" \
   --include "chains/" \
+  --include "behavior/" \
+  --include "privacy/" \
+  --include "scripts/" \
+  --include "tools/" \
   --include "README.md" \
   --include "LICENSE" \
   --include ".gitignore" \
@@ -518,7 +646,9 @@ rsync -av --prune-empty-dirs \
   --include "evals/build_dpo_dataset.py" \
   --include "evals/debug_pair_deltas.py" \
   --include "evals/compare_before_after.py" \
+  --include "evals/summarize_results.py" \
   --include "evals/quick_tests.jsonl" \
+  --include "evals/dataset.jsonl" \
   --include "evals/hard_negatives_hn_v2.jsonl" \
   --include "evals/results/***" \
   --include "train/" \
@@ -635,7 +765,7 @@ python evals/run_evals.py --dataset evals/quick_tests.jsonl --mode both
 - Mean no_invention == 1.00
 - Mean answer_relevancy >= 0.95
 
-### 3. DPO Dataset Building (Optional)
+### 2. DPO Dataset Building (Optional)
 ```bash
 BASE_JSON=$(ls -t evals/results/baseline_json_*.json | head -1)
 QUAL=$(ls -t evals/results/quality_*.json | head -1)
@@ -708,11 +838,27 @@ When `quality_mode: true` or `baseline_json_mode: true`, `/analyze` returns stru
 
 ## Privacy & Security
 
-- ✅ **Local-only**: All processing on localhost (Ollama + same-origin Flask)
-- ✅ **No external APIs**: Zero external network calls
-- ✅ **No database**: Flask session only (cookie-based, server-side)
+- ✅ **Local-only by default**: All processing on localhost (Ollama + same-origin Flask). Pinecone requires explicit opt-in via `ALLOW_CLOUD_VECTORSTORE=true`.
+- ✅ **No external APIs by default**: Zero external network calls in default configuration. Optional cloud integrations (Pinecone, Hugging Face for training) are gated and off by default.
+- ✅ **No traditional app database**: Flask signed-cookie sessions (client-side), no server DB. Optional local vector store (Chroma) for retrieval.
 - ✅ **No logging of sensitive data**: Journal entries and full model outputs never logged
-- ✅ **RAG is local**: Chroma vector store runs entirely on your machine
+- ✅ **RAG is local by default**: Chroma vector store runs entirely on your machine. Pinecone is optional and requires explicit configuration.
+
+### Threat Model / Privacy Stance
+
+**What we protect against:**
+- Data exfiltration: No data leaves your device by default
+- Cloud dependency: All core features work offline
+- Session tracking: No persistent server-side storage of journal entries
+- Model API calls: All LLM inference happens via local Ollama instance
+
+**What we don't protect against:**
+- Local file system access: Anyone with access to your machine can read stored data
+- Network interception: If you enable Pinecone, data flows to Pinecone's servers
+- Model quality: Local models may have limitations compared to cloud APIs
+- Medical advice: This is not a substitute for professional therapy or medical consultation
+
+**Important:** This tool is for personal reflection and journaling. It is **not medical advice**. For therapy, mental health support, or medical concerns, please consult licensed professionals.
 
 ---
 
@@ -751,7 +897,8 @@ ai-health-journal/
 ├── behavior/              # Behavior patterns
 │   ├── loader.py          # Pattern loader
 │   ├── rules.json         # Behavior rules
-│   └── failure_patterns.json # Failure patterns
+│   ├── failure_patterns.json # Failure patterns
+│   └── few_shot.jsonl     # Few-shot examples
 ├── vector_store/          # Vector store module
 │   ├── factory.py         # Vector store factory
 │   ├── base.py            # Base interface
@@ -765,16 +912,20 @@ ai-health-journal/
 │   ├── summarize_results.py  # Summarize results
 │   ├── quick_tests.jsonl  # Quick test dataset
 │   ├── dataset.jsonl      # Standard dataset
-│   └── hard_negatives_hn_v2.jsonl  # Hard negatives dataset
+│   ├── hard_negatives.jsonl # Hard negatives dataset
+│   ├── hard_negatives_hn_v2.jsonl  # Hard negatives v2 (recommended)
+│   └── hard_negatives_hn_v3.jsonl  # Hard negatives v3
 ├── train/                 # DPO training
 │   ├── train_dpo.py       # Training script
 │   ├── requirements.txt   # Training dependencies
-│   └── dpo_pairs_*.jsonl  # Generated pairs
+│   ├── dpo_pairs_*.jsonl  # Generated pairs
+│   └── dpo_pairs_*.sample.jsonl  # Sample subsets
 ├── scripts/               # Utility scripts
 │   └── benchmark.py       # Performance benchmarks
 ├── tools/                 # Development tools
-│   ├── demo_run.sh        # Demo script
+│   ├── demo_run.sh        # Demo script for testing endpoints
 │   ├── distill_evals_to_behavior.py # Behavior distillation
+│   ├── pinecone_bootstrap.py # Pinecone index setup utility
 │   └── set_model_env.sh   # Model environment setup
 ├── templates/             # HTML templates
 │   └── index.html         # Main UI
@@ -816,6 +967,12 @@ Contributions welcome! Please:
 
 MIT License - see LICENSE file for details.
 
+## Disclaimer
+
+**This is not medical advice.** This tool is designed for personal journaling and reflection. It is not a substitute for professional therapy, mental health counseling, or medical consultation. If you are experiencing mental health concerns, please consult licensed professionals.
+
+The AI-generated insights are based on local language models and should not be treated as clinical or therapeutic guidance.
+
 ---
 
 ## Acknowledgments
@@ -827,4 +984,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-**Status:** ✅ **PRODUCTION READY** (Local deployment)
+**Status:** ✅ **Stable local app + reproducible eval pipeline** (Feature-complete MVP for local deployment)
