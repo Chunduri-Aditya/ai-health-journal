@@ -14,7 +14,7 @@ Known drift inventory:
 | 4  | `Makefile::eval-smoke-retrieval` same as above                                                        | `Makefile:30–32`                             | Implement or remove |
 | 5  | `Makefile::report` reads from `artifacts/test_runs/evals/` — the tree writes to `evals/results/`      | `Makefile:36–43`                             | Align paths  |
 | 6  | README example `.env` says `RETRIEVAL_ENABLED=true`; code defaults to `false`                         | `README.md`, `config.py:39`                  | Align docs or flip default |
-| 7  | `privacy/local_text_cache.py` has no callers in the running app                                       | `privacy/local_text_cache.py`                | Wire in or delete |
+| 7  | `privacy/local_text_cache.py` is only consumed by the (gated) Pinecone path in `vector_store/pinecone_store.py`; deletable only after that consumer is removed or rewritten | `privacy/local_text_cache.py`, `vector_store/pinecone_store.py:12,112` | Keep until 03 revisits pinecone_store |
 | 8  | `privacy/redact.py` has no callers in the running app                                                 | `privacy/redact.py`                          | Wire in or delete |
 | 9  | `behavior/` rules/patterns/few-shots exist but aren't loaded by `/analyze`                            | `behavior/*`                                 | Wire in or scope as future |
 | 10 | `README.md` describes legacy/baseline/quality mode but doesn't describe the `baseline_json_mode` flag clearly | `README.md` + `/analyze` table          | Update docs |
@@ -80,12 +80,17 @@ Recommendation: the second. Update `.gitignore` to include `artifacts/`.
 
 ### E. `privacy/` module disposition
 
-Two files, no callers. Decision:
+Two files. Current call-graph:
+
+- **`privacy/redact.py`** — no callers in the running app. Candidate for wiring in.
+- **`privacy/local_text_cache.py`** — **not dead**. Imported and called by `vector_store/pinecone_store.py:12,112`. Writes and reads a JSONL cache of original texts so Pinecone retrieval can round-trip the source string even when only embeddings live remote. Removing it would break the Pinecone path.
+
+Decisions:
 
 - **Wire in:** `privacy/redact.py` runs before every `vector_store.add_entry` (post-03), and optionally on export/share paths. Keep SQLite as the canonical local journal record unless the user explicitly asks for full-storage redaction. Config: `PRIVACY_REDACT=off|vector_only|full`.
-- **`privacy/local_text_cache.py`:** superseded by the SQLite store from 02. Delete.
+- **Keep `privacy/local_text_cache.py`** until upgrade 03's retrieval-unification work revisits `pinecone_store.py`. At that point, evaluate whether the cache still has a purpose (post-03 the SQLite `entries.body` column may cover the same use case).
 
-Recommendation: wire in `redact.py` with a conservative default (`off` for now, with `vector_only` as the first supported mode once hardened), and delete `local_text_cache.py`. Add a test under 06.
+Recommendation: wire in `redact.py` with a conservative default (`off` for now, with `vector_only` as the first supported mode once hardened). Leave `local_text_cache.py` alone for this pass. Add a test under 06.
 
 ### F. `behavior/` module disposition
 
@@ -134,14 +139,14 @@ Add these to the `make verify` checklist (a `scripts/check_drift.sh` that grep-e
 
 ## Touch list
 
-- `chains/insight_chain.py` — delete (recommended) or fix fallback import.
-- `privacy/local_text_cache.py` — delete.
+- `chains/insight_chain.py` — **archived** to `archive/chains/insight_chain.py` on 2026-04-17 (see `archive/README.md`).
+- `privacy/local_text_cache.py` — keep; reassess during upgrade 03 after `pinecone_store.py` is touched.
 - `privacy/redact.py` — keep; wire into `vector_store` write path and export/share flow, with any `storage/repository.py` use gated behind explicit `full` mode.
 - `privacy/README.md` — new.
 - `behavior/README.md` — new.
 - `Makefile` — drop `langchain_chain`-related targets; align `report` path; rewrite `verify`; rewrite `eval-smoke` around `--mock_llm`.
 - `evals/run_evals.py` — implement `--mock_llm`, `--dry-run`; drop `langchain_chain` mode.
 - `README.md` — alignment sweep per section D.
-- `requirements.txt` — delete (with README note).
+- `requirements.txt` — **archived** to `archive/requirements.txt` on 2026-04-17 (README note still pending).
 - `scripts/check_drift.sh` — new.
 - `.gitignore` — add `artifacts/`, `storage/aihj.sqlite3*`, `storage/secret.key`, `storage/chroma/`.

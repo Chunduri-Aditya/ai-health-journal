@@ -26,7 +26,7 @@ test-integration:
 
 verify:
 	. $(VENV)/bin/activate && \
-	  $(PY) -m compileall -q . && \
+	  $(PY) -m compileall -q -x '(^|/)(archive|venv|\.git|__pycache__)/' . && \
 	  pytest
 
 eval-smoke:

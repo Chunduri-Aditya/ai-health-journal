@@ -192,7 +192,7 @@ dataset.jsonl ──► run_evals.py (quality)       ──► evals/results/qua
 | 10 | `Makefile` targets reference `--mock_llm`, `--verify-only`, `--mode langchain_chain` flags that `run_evals.py` doesn't implement | `Makefile:20, 24–26`     |
 | 11 | README `.env` example says `RETRIEVAL_ENABLED=true`, code defaults to `false`                         | `README.md` vs `config.py:39`              |
 | 12 | `AnalysisOutput` pydantic schema defined but never used to validate `/analyze` output                 | `schemas/analysis.py` + `app.py`           |
-| 13 | `privacy/local_text_cache.py` and `privacy/redact.py` have no callers in main app                     | `privacy/*`                                |
+| 13 | `privacy/redact.py` has no callers in the main app; `privacy/local_text_cache.py` is consumed only by the gated Pinecone path in `vector_store/pinecone_store.py` | `privacy/redact.py`, `vector_store/pinecone_store.py:12,112` |
 | 14 | `_run_baseline` uses `get_draft_prompt()` (strong user template) with a hardcoded `WEAKER_SYSTEM_PROMPT` — if `get_draft_prompt` tightens, baseline silently strengthens and DPO pairs starve | `app.py:288–320` |
 | 15 | `schemas/analysis.py` uses mutable list defaults; harmless enough under pydantic here, but should be normalized to `default_factory=list` when schema validation is tightened | `schemas/analysis.py` |
 
