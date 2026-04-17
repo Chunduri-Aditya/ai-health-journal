@@ -1,7 +1,7 @@
 PY := python3
 VENV := venv
 
-.PHONY: setup setup-full run verify eval-smoke report demo clean deps-check distill-behavior
+.PHONY: setup setup-full setup-dev run test test-integration verify eval-smoke report demo clean deps-check distill-behavior
 
 setup:
 	$(PY) -m venv $(VENV)
@@ -11,13 +11,23 @@ setup-full:
 	$(PY) -m venv $(VENV)
 	. $(VENV)/bin/activate && pip install -U pip && pip install -r requirements-core.txt && pip install -r requirements-optional.txt
 
+setup-dev:
+	$(PY) -m venv $(VENV)
+	. $(VENV)/bin/activate && pip install -U pip && pip install -r requirements-dev.txt
+
 run:
 	. $(VENV)/bin/activate && $(PY) app.py
 
+test:
+	. $(VENV)/bin/activate && pytest
+
+test-integration:
+	. $(VENV)/bin/activate && pytest -m integration
+
 verify:
 	. $(VENV)/bin/activate && \
-	  $(PY) -m compileall . && \
-	  $(PY) evals/run_evals.py --dataset evals/quick_tests.jsonl --mode quality --mock_llm --verify-only
+	  $(PY) -m compileall -q . && \
+	  pytest
 
 eval-smoke:
 	. $(VENV)/bin/activate && \
