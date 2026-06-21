@@ -55,3 +55,6 @@ sdist/
 var/
 venv/
 wheels/
+
+evals/logs/
+evals/reports/
