@@ -38,6 +38,13 @@ langchain-openai>=1.1.7,<2.0.0
 # OpenAI (required by langchain-openai>=1.1.7)
 openai>=1.109.1,<2.0.0
 
+# Local RAG vector store (Chroma)
+# In core so local retrieval works on a fresh clone. Without it the vector
+# store silently falls back to a no-op even when VECTOR_BACKEND=chroma, so the
+# journal history is never actually indexed. Pulls onnxruntime (the default
+# on-device embedder) as a transitive dep.
+chromadb>=0.4.0
+
 # Utilities
 tqdm==4.67.1
 sniffio==1.3.1

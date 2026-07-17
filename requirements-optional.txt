@@ -2,11 +2,9 @@
 # Install after requirements-core.txt: pip install -r requirements-optional.txt
 # Or use: make setup-full
 
-# Vector store backends (retrieval features)
-# Local vector store (Chroma)
-chromadb>=0.4.0
-
-# Pinecone client + LangChain integration
+# Cloud vector store backend (optional retrieval feature)
+# Local Chroma moved to requirements-core.txt so local RAG works out of the box.
+# Pinecone stays optional: cloud, gated behind ALLOW_CLOUD_VECTORSTORE=true.
 pinecone-client>=3.0.0
 langchain-pinecone==0.2.13
 

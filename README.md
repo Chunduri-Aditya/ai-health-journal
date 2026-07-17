@@ -53,7 +53,7 @@ embedded on-device and retrieved to ground new reflections. Everything below the
   ollama pull deepseek-r1:8b
   ```
 - The app will inspect the machine and installed Ollama models, then choose a balanced runtime stack automatically unless you set explicit model env vars.
-- Optional: [Chroma](https://www.trychroma.com/) for local RAG (installed via requirements-optional.txt)
+- Local RAG (Chroma) is included in the **core** install — no extra step
 - Optional: [Pinecone](https://www.pinecone.io/) for cloud RAG (requires API key, installed via requirements-optional.txt)
 
 ### Preflight Checks
@@ -69,8 +69,8 @@ python3 -m pip --version
 python3 -c "import requests; print('requests ok')"
 python3 -c "import flask; print('flask ok')"
 
-# Check optional RAG dependency
-python3 -c "import chromadb; print('chromadb ok')" || echo "⚠️  chromadb not available - RAG will be disabled"
+# Check local RAG dependency (part of the core install)
+python3 -c "import chromadb; print('chromadb ok')" || echo "⚠️  chromadb missing - run the core install; RAG falls back to no-op without it"
 ```
 
 **Note:** If Chroma import fails (dependency conflicts), RAG will be automatically disabled. The app will function normally without RAG.
@@ -111,7 +111,7 @@ pip install -r requirements-core.txt  # Core dependencies
 pip install -r requirements-optional.txt  # Optional: RAG, Pinecone, Whisper
 ```
 
-**Note:** For basic functionality, `requirements-core.txt` is sufficient. Install `requirements-optional.txt` for RAG (Chroma/Pinecone) and voice transcription features.
+**Note:** `requirements-core.txt` covers the app and local RAG (Chroma). Install `requirements-optional.txt` for cloud RAG (Pinecone) and voice transcription.
 
 **Note on `requirements.txt`:** This file exists but is legacy. Use `requirements-core.txt` and `requirements-optional.txt` instead for better dependency management.
 
