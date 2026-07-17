@@ -1,0 +1,25 @@
+{
+  "k": 2,
+  "documents": [
+    {"id": "work1", "text": "My manager piled three deadlines on me and I stayed late again, totally burned out."},
+    {"id": "work2", "text": "The project review went badly and I feel like I'm drowning under the pressure at the office."},
+    {"id": "sleep1", "text": "I've barely slept in days, lying awake at 3am with my mind racing."},
+    {"id": "sleep2", "text": "Another restless night. I keep waking up exhausted and foggy in the morning."},
+    {"id": "rel1", "text": "We argued again about the same thing and I don't feel heard by my partner."},
+    {"id": "rel2", "text": "Date night helped. We finally talked things through and I felt close to them again."},
+    {"id": "job1", "text": "Sent out ten applications today and got another rejection email. The job hunt is exhausting."},
+    {"id": "job2", "text": "Prepping for tomorrow's interview, nervous but hopeful about landing the role."},
+    {"id": "grat1", "text": "Grateful for the small things today: good coffee, a bit of sun, a walk with a friend."},
+    {"id": "grat2", "text": "I wrote down three good things that happened this week and felt lighter afterward."},
+    {"id": "health1", "text": "Started a morning run habit and my energy is slowly coming back."},
+    {"id": "health2", "text": "Skipped the gym all week and my body feels sluggish and tense."}
+  ],
+  "queries": [
+    {"query": "I can't cope with the workload and pressure at my job", "relevant_ids": ["work1", "work2"]},
+    {"query": "I keep waking up at night and cannot fall back asleep", "relevant_ids": ["sleep1", "sleep2"]},
+    {"query": "tension and conflict with my partner after a fight", "relevant_ids": ["rel1", "rel2"]},
+    {"query": "searching for a new job and dealing with rejections", "relevant_ids": ["job1", "job2"]},
+    {"query": "feeling thankful and appreciating the good moments", "relevant_ids": ["grat1", "grat2"]},
+    {"query": "exercise, movement, and my physical energy levels", "relevant_ids": ["health1", "health2"]}
+  ]
+}
