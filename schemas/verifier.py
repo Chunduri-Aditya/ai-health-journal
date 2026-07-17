@@ -19,5 +19,8 @@ class VerifierVerdict(BaseModel):
     groundedness_score: float = Field(ge=0.0, le=1.0)
     unsupported_claims: List[str] = Field(default_factory=list)
     safety_flags: List[str] = Field(default_factory=list)
+    # True only for explicit self-harm / suicidal ideation / intent to harm.
+    # The crisis gate in app.py reads this to suppress the reframe path.
+    crisis_detected: bool = False
     rewrite_required: bool
     rewrite_instructions: str = ""

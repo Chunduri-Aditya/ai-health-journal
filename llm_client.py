@@ -26,7 +26,9 @@ DRAFT_JSON_SCHEMA = {
         "triggers": {"type": "array", "items": {"type": "string"}},
         "coping_suggestions": {"type": "array", "items": {"type": "string"}},
         "quotes_from_user": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "journaling_feedback": {"type": "array", "items": {"type": "string"}},
+        "reframe": {"type": "string"}
     },
     "required": ["summary", "emotions", "patterns", "triggers", "coping_suggestions", "quotes_from_user", "confidence"],
     "additionalProperties": False
@@ -38,10 +40,11 @@ VERIFIER_JSON_SCHEMA = {
         "groundedness_score": {"type": "number", "minimum": 0, "maximum": 1},
         "unsupported_claims": {"type": "array", "items": {"type": "string"}},
         "safety_flags": {"type": "array", "items": {"type": "string"}},
+        "crisis_detected": {"type": "boolean"},
         "rewrite_required": {"type": "boolean"},
         "rewrite_instructions": {"type": "string"}
     },
-    "required": ["groundedness_score", "unsupported_claims", "safety_flags", "rewrite_required", "rewrite_instructions"],
+    "required": ["groundedness_score", "unsupported_claims", "safety_flags", "crisis_detected", "rewrite_required", "rewrite_instructions"],
     "additionalProperties": False
 }
 

@@ -14,14 +14,25 @@ A local-only journaling assistant that analyzes your entries using local LLMs (O
 
 ## What It Does
 
-- **AI-powered insights**: Analyze journal entries with local LLMs (Phi-3, Mistral) via Ollama
+The core is a **local, private RAG over your journal history**: past entries are
+embedded on-device and retrieved to ground new reflections. Everything below the
+"Optional extras" line is exactly that — optional.
+
+**Core (the RAG journal):**
+
+- **Local RAG over past entries**: entries embedded on-device (Chroma, ONNX MiniLM) and retrieved to ground new reflections. Cloud vector store (Pinecone) is gated off by default. Trust boundary and data flow: [PRIVACY.md](PRIVACY.md)
+- **Privacy-first by default**: runs fully on localhost (Flask + Ollama). No entry text, embedding, or insight leaves the machine unless you open a cloud gate. `PRIVACY_MODE=strict` scrubs PII (emails, phones) before an entry is stored
+- **AI-powered insights**: analyze journal entries with local LLMs (Phi-3, Mistral) via Ollama
 - **Multi-model quality pipeline**: Draft → Verify → Revise workflow reduces hallucinations
-- **RAG pipeline**: Local vector store (Chroma) or cloud (Pinecone) for context retrieval from past entries
-- **Therapeutic reflections**: Get emotional intelligence insights on your thoughts and patterns
-- **Session persistence**: History syncs between frontend and Flask session, persists across page refreshes
-- **Privacy-first by default**: Runs fully on localhost (Flask + Ollama). Optional cloud vector store (Pinecone) is off by default and requires explicit opt-in.
-- **Modern UI**: Typewriter animations, dark mode, collapsible history sidebar, request cancellation, model selector, quality mode toggle
-- **DPO Fine-tuning Pipeline**: Build preference datasets and train LoRA adapters to improve groundedness
+- **Therapeutic reflections with a crisis gate**: emotional-intelligence insights, journaling coaching, and a constructive reframe that is suppressed on crisis/self-harm entries in favor of a support message
+- **Session persistence**: history syncs between frontend and Flask session, persists across page refreshes
+
+**Optional extras (not core to the RAG journal):**
+
+- **Modern UI**: typewriter animations, dark mode, collapsible history sidebar, request cancellation, model selector, quality mode toggle
+- **Voice transcription** (`/transcribe`): local Whisper, optional dependency
+- **Model benchmark lab** (`/benchmark/latest`): compare local models on a patient-case suite
+- **DPO fine-tuning pipeline**: build preference datasets and train LoRA adapters to improve groundedness
 
 ## Quickstart
 

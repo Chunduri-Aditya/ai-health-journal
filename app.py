@@ -8,6 +8,7 @@ import html
 import json
 import logging
 import os
+import re
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ load_dotenv()
 
 from config import load_config
 from model_selection import get_runtime_model_selection
+from privacy.redact import redact
 
 cfg = load_config()
 
@@ -67,6 +69,36 @@ MAX_ENTRY_LENGTH = 1000
 TIMEOUT_LEGACY   = 30   # seconds — legacy single-call mode
 TIMEOUT_QUALITY  = 90   # seconds — per LLM call in the quality pipeline
 BENCHMARK_LATEST_JSON = Path("evals/reports/job_market_patient_model_benchmark_latest.json")
+
+# ── Crisis gate ───────────────────────────────────────────────────────────────
+# A deterministic floor beneath the verifier's judgment. Reflexive, first-person
+# self-harm phrasing forces the support path even if the verifier misses it or
+# its call failed, so the reframe/positivity path fails closed. Kept tight (first
+# person, reflexive) so idioms like "this job is killing me" do not trigger it.
+_CRISIS_PATTERNS = re.compile(
+    r"\b("
+    r"kill(?:ing)?\s+myself|"
+    r"end(?:ing)?\s+my\s+life|"
+    r"take\s+my\s+own\s+life|"
+    r"want\s+to\s+die|"
+    r"don'?t\s+want\s+to\s+(?:live|be\s+here|wake\s+up)|"
+    r"hurt(?:ing)?\s+myself|harm(?:ing)?\s+myself|"
+    r"self[-\s]?harm|"
+    r"suicid(?:e|al)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Product-owner editable. Shown INSTEAD of a reframe when the crisis gate fires.
+# Acknowledges without diagnosing and points outward. Set AIHJ_CRISIS_MESSAGE to
+# localize the resource line for your region.
+CRISIS_SUPPORT_MESSAGE = os.getenv(
+    "AIHJ_CRISIS_MESSAGE",
+    "It sounds like you're carrying something really heavy right now, and you "
+    "don't have to carry it alone. Please consider reaching out to a crisis line "
+    "in your area or someone you trust. If you're in immediate danger, contact "
+    "local emergency services.",
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -273,6 +305,43 @@ def transcribe_audio():
         return jsonify({"error": "Transcription failed. Please try again."}), 500
 
 
+# ── Crisis gate ───────────────────────────────────────────────────────────────
+def _is_crisis(journal_entry: str, verdict: Dict[str, Any]) -> bool:
+    """Crisis decision for the reframe gate.
+
+    Fails closed: fires if the verifier judged a crisis, if any safety flag names
+    self-harm, OR if the raw entry matches the reflexive self-harm floor. The
+    floor covers the case where the verifier call failed or missed it.
+    """
+    if verdict.get("crisis_detected"):
+        return True
+    flags = " ".join(verdict.get("safety_flags", [])).lower()
+    if any(term in flags for term in ("self-harm", "self harm", "suicid", "harm to self")):
+        return True
+    return bool(_CRISIS_PATTERNS.search(journal_entry or ""))
+
+
+def _apply_reframe_gate(
+    analysis_json: Dict[str, Any],
+    journal_entry: str,
+    verdict: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Suppress the positivity/reframe path on crisis entries; route to support.
+
+    Deterministic by design: the model classifies (crisis_detected), code acts.
+    On a crisis the reframe is cleared and a non-diagnostic support message is
+    attached so the UI never answers self-harm with cheerfulness.
+    """
+    if _is_crisis(journal_entry, verdict):
+        analysis_json["reframe"] = ""
+        analysis_json["crisis_support"] = True
+        analysis_json["support_message"] = CRISIS_SUPPORT_MESSAGE
+    else:
+        analysis_json.setdefault("crisis_support", False)
+        analysis_json.setdefault("support_message", "")
+    return analysis_json
+
+
 # ── Pipeline helpers ──────────────────────────────────────────────────────────
 def _run_quality_pipeline(
     journal_entry: str,
@@ -346,13 +415,13 @@ def _run_quality_pipeline(
                 validator_model=AnalysisOutput,
             )
             logging.info("Revision completed.")
-            return final_json
+            return _apply_reframe_gate(final_json, journal_entry, verdict)
         except Exception as e:
             logging.error(f"Revision failed: {type(e).__name__}. Using original draft.")
-            return draft_json
+            return _apply_reframe_gate(draft_json, journal_entry, verdict)
 
     logging.info("Draft passed verification.")
-    return draft_json
+    return _apply_reframe_gate(draft_json, journal_entry, verdict)
 
 
 def _run_baseline(
@@ -520,6 +589,18 @@ def _hit_to_source(hit: "RetrievalHit") -> Dict[str, Any]:
 
 
 # ── Shared helpers: storage ───────────────────────────────────────────────────
+def _maybe_redact(text: str) -> str:
+    """Scrub PII before it lands in the local RAG store, when PRIVACY_MODE=strict.
+
+    Only `strict` redacts; any other mode (default `balanced`) stores raw text,
+    preserving current behavior. The trust boundary is local disk either way —
+    strict is defense-in-depth so the at-rest history carries no emails/phones.
+    """
+    if cfg.privacy_mode == "strict":
+        return redact(text)
+    return text
+
+
 def _store_in_rag(
     entry: str,
     insight: str,
@@ -538,15 +619,20 @@ def _store_in_rag(
     if not vector_store.enabled:
         return
     entry_id = entry_id or _new_entry_id()
+    # PRIVACY_MODE=strict scrubs PII (emails, phones) before it is persisted to
+    # the local RAG store, so the retrievable history and its metadata are
+    # redacted at rest. Mode change is not retroactive: entries written under a
+    # looser mode keep their original text. See _maybe_redact.
+    stored_text = _maybe_redact(entry)
     vector_store.add_entry(
         entry_id=entry_id,
-        text=entry,
+        text=stored_text,
         metadata={
             "kind": "journal_entry",
             "namespace": namespace or "",
             "created_at": datetime.utcnow().isoformat(),
-            "entry_length": len(entry),
-            "insight_preview": (insight or "")[:500],
+            "entry_length": len(stored_text),
+            "insight_preview": _maybe_redact(insight or "")[:500],
         },
         namespace=namespace,
     )
@@ -574,6 +660,15 @@ def _format_insight(analysis_json: Dict[str, Any]) -> str:
     if analysis_json.get("coping_suggestions"):
         suggestions = "\n".join(f"• {s}" for s in analysis_json["coping_suggestions"])
         parts.append(f"\nSuggestions:\n{suggestions}")
+    if analysis_json.get("journaling_feedback"):
+        tips = "\n".join(f"• {s}" for s in analysis_json["journaling_feedback"])
+        parts.append(f"\nJournaling tips:\n{tips}")
+    # Crisis support and reframe are mutually exclusive: the gate clears reframe
+    # on crisis, so support_message never appears alongside positivity.
+    if analysis_json.get("crisis_support") and analysis_json.get("support_message"):
+        parts.append(f"\n{analysis_json['support_message']}")
+    elif analysis_json.get("reframe"):
+        parts.append(f"\nA gentler way to see this:\n{analysis_json['reframe']}")
     return "\n".join(parts) if parts else json.dumps(analysis_json, indent=2)
 
 

@@ -15,11 +15,14 @@ Check for:
 2. HALLUCINATIONS: Are there invented facts, events, or assumptions?
 3. SAFETY: Are there concerning safety flags (self-harm, etc.)?
 4. FORMAT: Is the JSON structure correct?
+5. CRISIS: Does the entry signal self-harm, suicidal thoughts, or intent to harm self/others? Set crisis_detected accordingly.
+6. REFRAME TONE: If the draft's `reframe` dismisses or minimizes the feeling, or applies positivity/cheerfulness to a crisis entry, add a safety_flag and require a rewrite.
 
 Return a JSON object that matches the provided schema with these exact fields:
 - groundedness_score: float (0.0-1.0, 1.0 = fully grounded)
 - unsupported_claims: array of strings (specific claims not supported by evidence)
 - safety_flags: array of strings (any safety concerns, empty if none)
+- crisis_detected: boolean (true ONLY for explicit self-harm, suicidal ideation, or intent to harm self/others; false for ordinary sadness, frustration, stress, or venting)
 - rewrite_required: boolean (true if groundedness_score < 0.75 OR unsupported_claims exist OR safety_flags exist)
 - rewrite_instructions: string (specific instructions for revision if rewrite_required is true, empty string otherwise)
 

@@ -38,6 +38,17 @@ class AnalysisOutput(BaseModel):
     quotes_from_user: List[str] = Field(default_factory=list, max_length=5)
     confidence: float = Field(ge=0.0, le=1.0)
 
+    # Coaching on *how* to journal, and a compassionate reframe of a negative
+    # thought pattern. reframe is "" for neutral/positive entries and is force-
+    # cleared by the crisis gate (see app._apply_reframe_gate) on crisis entries.
+    journaling_feedback: List[str] = Field(default_factory=list, max_length=5)
+    reframe: str = ""
+
+    # Set deterministically by the crisis gate, never by the model. A crisis
+    # entry suppresses `reframe` and routes to support instead of positivity.
+    crisis_support: bool = False
+    support_message: str = ""
+
     grounding_evidence: List[str] = Field(default_factory=list)
     grounding_sources: List[GroundingSource] = Field(default_factory=list)
     grounding_mode: Optional[str] = None
