@@ -5,20 +5,24 @@ Computes RAGAS-style metrics and instruction-following accuracy.
 """
 
 import json
+import logging
 import os
 import sys
 import time
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import requests
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
+from config import load_config
 from llm_client import json_generate
 from generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
 from verifier_prompts import VERIFIER_SYSTEM_PROMPT, get_verifier_prompt
+
+cfg = load_config()
 
 
 def load_dataset(dataset_path: str) -> List[Dict]:
@@ -34,20 +38,20 @@ def load_dataset(dataset_path: str) -> List[Dict]:
 def compute_faithfulness(analysis_json: Dict, entry: str, retrieved_context: str = "") -> float:
     """
     Compute faithfulness score (0-1): Are claims supported by evidence?
-    Uses verifier as judge.
+    Uses the verifier model as judge (LLM-as-judge pattern).
     """
     try:
         verifier_prompt = get_verifier_prompt(analysis_json, entry, retrieved_context)
         verdict = json_generate(
-            app.config.get('VERIFIER_MODEL', 'samantha-mistral:7b'),
+            cfg.verifier_model,
             VERIFIER_SYSTEM_PROMPT,
             verifier_prompt,
-            max_retries=1
+            max_retries=1,
         )
-        return verdict.get('groundedness_score', 0.0)
+        return verdict.get("groundedness_score", 0.0)
     except Exception as e:
         print(f"  Warning: Faithfulness computation failed: {e}")
-        return 0.5  # Default neutral score
+        return 0.5  # Neutral fallback — flag when reviewing results
 
 
 def compute_answer_relevancy(analysis_json: Dict, entry: str) -> float:
@@ -71,24 +75,38 @@ def compute_answer_relevancy(analysis_json: Dict, entry: str) -> float:
 
 def compute_context_precision(retrieved_context: str, entry: str) -> float:
     """
-    Compute context precision (0-1): Are retrieved contexts relevant?
-    Simple heuristic: if retrieval is enabled and context exists, assume relevance.
+    Compute context precision (0-1): Are retrieved contexts relevant to the entry?
+
+    Uses word-overlap (Jaccard similarity on lowercased tokens) as a lightweight
+    proxy. Not a true RAGAS-style LLM judge, but avoids the misleading constant
+    scores the length-heuristic produced.  Replace with an LLM judge call if
+    precision is a key training signal.
     """
     if not retrieved_context:
-        return 1.0  # No context to evaluate
-    # Simple: if context exists and is non-empty, assume some relevance
-    return 0.7 if len(retrieved_context) > 50 else 0.5
+        return 1.0  # No context retrieved — nothing to penalise
+    entry_tokens     = set(entry.lower().split())
+    context_tokens   = set(retrieved_context.lower().split())
+    if not entry_tokens:
+        return 0.5
+    overlap = entry_tokens & context_tokens
+    return len(overlap) / len(entry_tokens | context_tokens) if (entry_tokens | context_tokens) else 0.5
 
 
 def compute_context_recall(retrieved_context: str, entry: str) -> float:
     """
-    Compute context recall (0-1): Does retrieval capture relevant information?
-    Simple heuristic based on context length and presence.
+    Compute context recall (0-1): How much of the entry's signal appears in context?
+
+    Uses recall-side Jaccard: |overlap| / |entry_tokens|.
+    Returns 0.0 when no context is retrieved (correct — nothing was recalled).
     """
     if not retrieved_context:
         return 0.0
-    # Simple: if context exists, assume some recall
-    return 0.6 if len(retrieved_context) > 50 else 0.3
+    entry_tokens   = set(entry.lower().split())
+    context_tokens = set(retrieved_context.lower().split())
+    if not entry_tokens:
+        return 0.0
+    overlap = entry_tokens & context_tokens
+    return len(overlap) / len(entry_tokens)
 
 
 def check_instruction_following(analysis_json: Dict) -> Dict[str, bool]:
@@ -167,12 +185,14 @@ def run_evaluation(baseline_mode: bool = False, quality_mode: bool = True, basel
     parse_failures = 0
     rag_enabled = False
     
-    # Check RAG availability
+    # Check retrieval availability via the unified vector_store surface.
     try:
-        from rag_store import get_rag_store, CHROMA_AVAILABLE
-        rag_store = get_rag_store()
-        rag_enabled = rag_store and rag_store.enabled and CHROMA_AVAILABLE
-    except:
+        from vector_store.base import format_hits_as_context
+        from vector_store.factory import get_vector_store
+        _vs = get_vector_store(default_namespace="eval")
+        rag_enabled = _vs.enabled
+    except Exception:
+        _vs = None
         rag_enabled = False
     
     total_metrics = {
@@ -308,14 +328,12 @@ def run_evaluation(baseline_mode: bool = False, quality_mode: bool = True, basel
                 if quality_mode and not baseline_mode:
                     parse_failures += 1
             
-            # Get retrieved context if available (from RAG)
+            # Retrieve context (if RAG enabled) via the unified vector_store.
             retrieved_context = ""
-            if rag_enabled:
+            if rag_enabled and _vs is not None:
                 try:
-                    from rag_store import get_rag_store
-                    rag_store = get_rag_store()
-                    if rag_store and rag_store.enabled:
-                        retrieved_context = rag_store.retrieve(entry, top_k=3)
+                    hits = _vs.query(entry, top_k=3, namespace="eval")
+                    retrieved_context = format_hits_as_context(hits)
                 except Exception as e:
                     logging.debug(f"RAG retrieval failed: {type(e).__name__}")
             
@@ -477,6 +495,119 @@ def generate_markdown_summary(baseline_results: Dict, quality_results: Dict) -> 
     return md
 
 
+def run_claude_evaluation(dataset_path: str) -> Dict[str, Any]:
+    """
+    Offline teacher path — run eval corpus through Claude (AnthropicProvider).
+
+    This is the high-value distillation surface: Claude acts as both the
+    gold-standard generator and the quality judge so the local model can
+    learn from its output via DPO.
+
+    IMPORTANT — this is:
+    - Offline only: runs on the eval corpus, never on live user entries.
+    - Opt-in only: requires LLM_BACKEND=anthropic + ALLOW_CLOUD_LLM=true in env.
+    - Gated: if the gate is closed this function raises immediately.
+
+    Claude output must clear the same should_keep_pair guards as Ollama quality
+    output (faithfulness >= 0.95, no_invention == 1.0, forbidden-content regex).
+    No free pass.
+
+    Note defect #14: if a Claude baseline target is added for DPO, it must be
+    deliberately weaker than the Claude quality path (lower temperature, no
+    validator_model, fewer retries), same as the Ollama baseline.  Otherwise
+    pairs starve and DPO training degrades.
+    """
+    from config import load_config
+    from providers.factory import get_llm_provider
+    from generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
+    from llm_client import DRAFT_JSON_SCHEMA, VERIFIER_JSON_SCHEMA
+    from schemas.analysis import AnalysisOutput
+
+    cfg = load_config()
+
+    if cfg.llm_backend != "anthropic" or not cfg.allow_cloud_llm:
+        raise RuntimeError(
+            "Claude eval target requires LLM_BACKEND=anthropic and ALLOW_CLOUD_LLM=true. "
+            "This path is offline-only and must be explicitly enabled."
+        )
+
+    provider = get_llm_provider(cfg)
+    generator_model = cfg.anthropic_generator_model
+
+    cases = load_dataset(dataset_path)
+    print(f"Running Claude eval on {len(cases)} cases (offline teacher path)...")
+    print(f"Model: {generator_model}\n")
+
+    results = []
+    parse_failures = 0
+
+    for i, case in enumerate(cases, 1):
+        entry = case["entry"]
+        entry_id = case.get("entry_id", f"case_{i}")
+        category = case.get("category", "unknown")
+        dataset_version = case.get("dataset_version", "1.0")
+
+        print(f"Case {i}/{len(cases)}: {entry[:50]}...")
+
+        start_time = time.time()
+        analysis_json: Dict[str, Any] = {}
+        failure_reason = ""
+
+        try:
+            draft_prompt = get_draft_prompt(entry, "")
+            analysis_json = provider.json_generate(
+                generator_model,
+                DRAFT_SYSTEM_PROMPT,
+                draft_prompt,
+                max_retries=3,
+                json_schema=DRAFT_JSON_SCHEMA,
+                validator_model=AnalysisOutput,
+            )
+        except Exception as e:
+            parse_failures += 1
+            failure_reason = str(e)
+            logging.warning(f"Claude generation failed for case {i}: {type(e).__name__}")
+
+        latency = time.time() - start_time
+        faithfulness = compute_faithfulness(analysis_json, entry) if analysis_json else 0.0
+        answer_relevancy = compute_answer_relevancy(analysis_json, entry) if analysis_json else 0.0
+        instruction_checks = check_instruction_following(analysis_json) if analysis_json else {}
+        no_invention = check_no_invention(analysis_json, case.get("must_not_invent", []), entry) if analysis_json else {"violations": [], "score": 0.0}
+
+        print(f"  {'✓' if analysis_json else '❌'} Faithfulness: {faithfulness:.2f}, Relevancy: {answer_relevancy:.2f}")
+
+        results.append({
+            "entry_id": entry_id,
+            "entry": entry,
+            "category": category,
+            "dataset_version": dataset_version,
+            "latency_seconds": latency,
+            "parse_failures": 1 if failure_reason else 0,
+            "claude_output": json.dumps(analysis_json) if analysis_json else "",
+            "final_json": analysis_json,
+            "metrics": {
+                "faithfulness": faithfulness,
+                "answer_relevancy": answer_relevancy,
+                "instruction_following": sum(instruction_checks.values()) / len(instruction_checks) if instruction_checks else 0.0,
+                "no_invention": no_invention["score"],
+                "latency": latency,
+            },
+            "instruction_checks": instruction_checks,
+            "no_invention_details": no_invention,
+            "failure_reason": failure_reason,
+            "analysis": analysis_json,
+        })
+
+    return {
+        "mode": "claude",
+        "model": generator_model,
+        "timestamp": datetime.now().isoformat(),
+        "num_cases": len(cases),
+        "parse_failures": parse_failures,
+        "case_results": results,
+    }
+
+
 def main():
     """Run evaluations in both modes and generate reports."""
     import argparse
@@ -485,28 +616,50 @@ def main():
     parser.add_argument('--mode', type=str, choices=['baseline', 'baseline_json', 'quality', 'both'], default='both', help='Evaluation mode: baseline (legacy), baseline_json (single-pass JSON), quality, or both')
     parser.add_argument('--baseline-only', action='store_true', help='Run only baseline mode (deprecated: use --mode baseline)')
     parser.add_argument('--quality-only', action='store_true', help='Run only quality mode (deprecated: use --mode quality)')
+    # Offline teacher path — opt-in, requires ALLOW_CLOUD_LLM=true + ANTHROPIC_API_KEY.
+    parser.add_argument('--claude', action='store_true', help=(
+        'Run the offline Claude teacher target. '
+        'Requires LLM_BACKEND=anthropic and ALLOW_CLOUD_LLM=true. '
+        'Runs on eval corpus only — never on live user data.'
+    ))
     args = parser.parse_args()
-    
+
     # Handle deprecated flags
     if args.baseline_only:
         args.mode = 'baseline'
     if args.quality_only:
         args.mode = 'quality'
-    
+
     # Determine dataset path
     if args.dataset:
         dataset_path = args.dataset
     else:
         dataset_path = os.path.join(os.path.dirname(__file__), 'dataset.jsonl')
-    
+
     results_dir = os.path.join(os.path.dirname(__file__), 'results')
     os.makedirs(results_dir, exist_ok=True)
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     baseline_results = None
     quality_results = None
-    
+
+    # Offline teacher path — must run before standard modes so the results file
+    # is available when build_dpo_dataset.py runs with --claude-chosen.
+    if args.claude:
+        print("=" * 60)
+        print("RUNNING CLAUDE OFFLINE TEACHER TARGET")
+        print("=" * 60)
+        try:
+            claude_results = run_claude_evaluation(dataset_path)
+            claude_path = os.path.join(results_dir, f'claude_{timestamp}.json')
+            with open(claude_path, 'w') as f:
+                json.dump(claude_results, f, indent=2)
+            print(f"\nClaude results saved to: {claude_path}\n")
+        except RuntimeError as e:
+            print(f"\nClaude target blocked: {e}\n")
+            return
+
     if args.mode in ['baseline', 'both']:
         print("=" * 60)
         print("RUNNING BASELINE MODE (legacy)")
@@ -516,7 +669,7 @@ def main():
         with open(baseline_path, 'w') as f:
             json.dump(baseline_results, f, indent=2)
         print(f"\nBaseline results saved to: {baseline_path}\n")
-    
+
     if args.mode == 'baseline_json':
         print("=" * 60)
         print("RUNNING BASELINE JSON MODE")
@@ -526,7 +679,7 @@ def main():
         with open(baseline_json_path, 'w') as f:
             json.dump(baseline_json_results, f, indent=2)
         print(f"\nBaseline JSON results saved to: {baseline_json_path}\n")
-    
+
     if args.mode in ['quality', 'both']:
         print("=" * 60)
         print("RUNNING QUALITY PIPELINE MODE")
@@ -536,7 +689,7 @@ def main():
         with open(quality_path, 'w') as f:
             json.dump(quality_results, f, indent=2)
         print(f"\nQuality results saved to: {quality_path}\n")
-    
+
     # Generate comparison if both modes run
     if baseline_results and quality_results:
         summary_md = generate_markdown_summary(baseline_results, quality_results)

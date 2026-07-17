@@ -1,5 +1,5 @@
 """
-Prompt templates for verification (LLM-as-judge).
+Prompt templates for verification (LLM-as-judge) and revision.
 """
 
 import json
@@ -50,5 +50,51 @@ def get_verifier_prompt(draft_json: dict, journal_entry: str, retrieved_context:
     
     prompt += "Evaluate groundedness, check for hallucinations, and identify safety concerns. "
     prompt += "\nReturn ONLY valid JSON that matches the schema. No markdown, no commentary, no code fences."
-    
+
+    return prompt
+
+
+def get_revision_prompt(
+    draft_json: dict,
+    verdict: dict,
+    journal_entry: str,
+    retrieved_context: str = "",
+) -> str:
+    """
+    Build a revision prompt from the verifier's verdict.
+
+    Args:
+        draft_json: The original draft analysis
+        verdict: The verifier's output JSON
+        journal_entry: Original journal entry
+        retrieved_context: Retrieved context (if any)
+
+    Returns:
+        Formatted revision prompt
+    """
+    groundedness_score = verdict.get("groundedness_score", 0.0)
+    unsupported = verdict.get("unsupported_claims", [])
+    safety_flags = verdict.get("safety_flags", [])
+    instructions = verdict.get(
+        "rewrite_instructions",
+        "Fix unsupported claims and ensure all information is grounded in the entry.",
+    )
+
+    prompt = "Revise this analysis based on the verification feedback below.\n\n"
+    prompt += f"ORIGINAL DRAFT:\n{json.dumps(draft_json, indent=2)}\n\n"
+    prompt += "VERIFICATION FEEDBACK:\n"
+    prompt += f"- Groundedness Score: {groundedness_score}\n"
+    if unsupported:
+        prompt += f"- Unsupported Claims: {unsupported}\n"
+    if safety_flags:
+        prompt += f"- Safety Flags: {safety_flags}\n"
+    prompt += f"- Instructions: {instructions}\n\n"
+    prompt += f"CURRENT ENTRY:\n{journal_entry}\n\n"
+    if retrieved_context:
+        prompt += f"RETRIEVED CONTEXT:\n{retrieved_context}\n\n"
+    prompt += (
+        "Return the revised JSON with the same structure as the original draft. "
+        "Ensure all claims are grounded in the entry. "
+        "Return ONLY valid JSON. No markdown, no commentary, no code fences."
+    )
     return prompt

@@ -8,6 +8,8 @@ A local-only journaling assistant that analyzes your entries using local LLMs (O
 
 **Quick links:** [Quickstart](#quickstart) | [Evaluation Pipeline](#dpo-dataset-builder-baseline-vs-quality--reproducible-eval--pairing--training) | [Architecture](#architecture) | [Common Issues](#common-issues) | [Privacy & Security](#privacy--security)
 
+**Planning docs:** [Project Overview](docs/PROJECT_OVERVIEW.md) | [Upgrade Roadmap](docs/upgrades/README.md)
+
 ---
 
 ## What It Does
@@ -27,11 +29,19 @@ A local-only journaling assistant that analyzes your entries using local LLMs (O
 
 - Python 3.8+
 - [Ollama](https://ollama.ai/) installed and running
-- Required models pulled:
+- Recommended balanced models pulled:
   ```bash
-  ollama pull phi3:3.8b
-  ollama pull samantha-mistral:7b
+  # Compact / lower-memory machines
+  ollama pull gemma3:4b
+  ollama pull qwen3:4b
+
+  # Balanced default
+  ollama pull qwen3:8b
+
+  # Optional higher-quality verifier on larger machines
+  ollama pull deepseek-r1:8b
   ```
+- The app will inspect the machine and installed Ollama models, then choose a balanced runtime stack automatically unless you set explicit model env vars.
 - Optional: [Chroma](https://www.trychroma.com/) for local RAG (installed via requirements-optional.txt)
 - Optional: [Pinecone](https://www.pinecone.io/) for cloud RAG (requires API key, installed via requirements-optional.txt)
 
@@ -56,7 +66,20 @@ python3 -c "import chromadb; print('chromadb ok')" || echo "⚠️  chromadb not
 
 ### Installation
 
-**Option 1: Using Makefile (Recommended)**
+**Option 0: One-shot launcher (recommended)**
+
+```bash
+git clone https://github.com/Chunduri-Aditya/ai-health-journal.git
+cd ai-health-journal
+./start.sh             # core install, verifies Ollama, launches on :5000
+# or
+./start.sh --full      # also install optional deps (Chroma, Pinecone, Whisper)
+./start.sh --check     # preflight only — don't launch
+```
+
+`./start.sh` verifies Python, the Ollama binary, and the Ollama daemon (starting it if needed), offers to pull `gemma3:4b` if you have no chat models installed, creates `venv/` on first run, reinstalls dependencies only when the requirements file changes, and copies `.env.example → .env` if you don't have one. Re-runs are fast.
+
+**Option 1: Using Makefile**
 
 ```bash
 git clone https://github.com/Chunduri-Aditya/ai-health-journal.git
@@ -87,10 +110,14 @@ Create a `.env` file to customize models and features:
 
 ```bash
 # Model Configuration
-GENERATOR_MODEL=phi3:3.8b
-FALLBACK_MODEL=phi3:3.8b
-VERIFIER_MODEL=samantha-mistral:7b
-PROMPT_MODEL=samantha-mistral:7b
+MODEL_SELECTION_STRATEGY=balanced
+MODEL_MACHINE_TIER_OVERRIDE=auto
+
+# Optional manual overrides
+# GENERATOR_MODEL=qwen3:8b
+# FALLBACK_MODEL=qwen3:8b
+# VERIFIER_MODEL=qwen3:8b
+# PROMPT_MODEL=gemma3:4b
 
 # Feature Flags
 QUALITY_MODE_DEFAULT=false
@@ -100,11 +127,38 @@ GROUNDEDNESS_THRESHOLD=0.75
 # Vector Store Backend (none/chroma/pinecone)
 VECTOR_BACKEND=chroma
 ALLOW_CLOUD_VECTORSTORE=false  # Set to true to enable Pinecone
+# Local Chroma persists at ./storage/chroma/ (override with CHROMA_PERSIST_DIR)
+# NOTE: the legacy ./rag_store/ path was retired with upgrade 03. Migrate manually
+#       if you have existing embeddings; no automatic move is performed.
 
 # Privacy Settings
 PRIVACY_MODE=balanced
 LOCAL_CACHE_MAX_ITEMS=2000
+
+# ── LLM Backend (Upgrade 08) ────────────────────────────────────────────────
+# Default: ollama (local). All analysis stays on localhost unless both gates below are open.
+LLM_BACKEND=ollama          # ollama | anthropic
+ALLOW_CLOUD_LLM=false       # Hard gate. Must be true to allow any Anthropic call.
+# ANTHROPIC_API_KEY=sk-ant-... # Required when LLM_BACKEND=anthropic + ALLOW_CLOUD_LLM=true.
+                              # Never commit. Never logs into session payloads or RAG metadata.
+# Per-role Anthropic model overrides (optional — defaults below are current at time of writing):
+# ANTHROPIC_GENERATOR_MODEL=claude-sonnet-4-6
+# ANTHROPIC_VERIFIER_MODEL=claude-sonnet-4-6
+# ANTHROPIC_PROMPT_MODEL=claude-haiku-4-5-20251001
 ```
+
+**Cloud LLM gate** mirrors the cloud vector store gate: `ALLOW_CLOUD_LLM=false` (default) means zero
+traffic leaves localhost regardless of `LLM_BACKEND`.  Even if `LLM_BACKEND=anthropic` is set but
+the gate is closed, the app falls back to Ollama and logs the reason.  Set both to enable:
+
+```bash
+export LLM_BACKEND=anthropic
+export ALLOW_CLOUD_LLM=true
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The `ANTHROPIC_API_KEY` is read from the environment only.  It never appears in logs, session
+payloads, or RAG metadata.  Run `grep -r ANTHROPIC_API_KEY .` (excluding `.env`) to verify.
 
 ### Run
 
@@ -122,9 +176,10 @@ make run  # Activates venv and runs app.py
 ```
 
 **UI Features:**
-- **Model Selector**: Choose generator or prompt model
+- **Model Selector**: Choose from locally installed Ollama chat models, with the recommended balanced model preselected when available
 - **Quality Mode Toggle**: Enable Draft → Verify → Revise pipeline for higher accuracy
 - **Fast Mode** (Quality Mode OFF): Single-model generation (backward compatible)
+- **Machine-Aware Balanced Preset**: When model env vars are omitted, the app recommends and uses a balanced local model stack based on machine RAM and installed Ollama models
 
 ### Screenshots / Demo
 
@@ -186,13 +241,13 @@ A successful re-evaluation should show:
 - `llm_client.py` - LLM wrapper with temperature/model support
 - `generator_prompts.py` - Draft generation prompts
 - `verifier_prompts.py` - Verification prompts
-- `rag_store.py` - Legacy RAG store wrapper (Chroma)
 - `version.py` - Version information
-- `vector_store/` - Modern vector store module with factory pattern
-  - `factory.py` - Vector store factory (Chroma/Pinecone/None)
-  - `base.py` - Base vector store interface
-  - `chroma_store.py` - Local Chroma implementation
-  - `pinecone_store.py` - Pinecone cloud implementation
+- `vector_store/` - Unified retrieval surface (the only one the app uses)
+  - `base.py` - `VectorStore` ABC, `RetrievalHit` dataclass, `format_hits_as_context` helper
+  - `factory.py` - Builds the concrete store from `RETRIEVAL_ENABLED` + `VECTOR_BACKEND`
+  - `noop_store.py` - Silent no-op backend when retrieval is disabled
+  - `chroma_store.py` - Local Chroma, per-namespace collections, persists at `./storage/chroma/`
+  - `pinecone_store.py` - Pinecone cloud, per-call `namespace=` support
 
 ### Evaluation Pipeline
 - `evals/run_evals.py` - Runs dataset prompts through chosen mode, writes results JSON
@@ -293,9 +348,10 @@ curl http://localhost:11434
 
 **Fix:**
 ```bash
-# Pull required models
-ollama pull phi3:3.8b
-ollama pull samantha-mistral:7b
+# Pull a balanced starter set
+ollama pull gemma3:4b
+ollama pull qwen3:4b
+ollama pull qwen3:8b
 
 # Verify models are available
 ollama list
@@ -569,9 +625,8 @@ You want a minimal, clean folder that:
 - `llm_client.py`
 - `generator_prompts.py`
 - `verifier_prompts.py`
-- `rag_store.py`
 - `version.py`
-- `vector_store/` (modern vector store module)
+- `vector_store/` (unified retrieval surface — Chroma / Pinecone / noop)
 - `schemas/` (data schemas)
 - `chains/` (LangChain integrations)
 - `behavior/` (behavior patterns and rules)
@@ -624,7 +679,6 @@ rsync -av --prune-empty-dirs \
   --include "llm_client.py" \
   --include "generator_prompts.py" \
   --include "verifier_prompts.py" \
-  --include "rag_store.py" \
   --include "version.py" \
   --include "vector_store/" \
   --include "schemas/" \
@@ -803,12 +857,12 @@ flowchart LR
 | Endpoint | Method | Input | Output |
 |----------|--------|-------|--------|
 | `/` | GET | - | HTML page |
-| `/ping` | GET | - | `{"status": "ok"}` |
+| `/ping` | GET | - | `{"status": "ok", "version": "...", "retrieval": {"backend": "chroma\|pinecone\|none", "enabled": bool, "healthy": bool}}` |
 | `/analyze` | POST | `{"entry": "string", "model": "string" (opt), "quality_mode": bool (opt), "baseline_json_mode": bool (opt)}` | `{"insight": "string", "analysis": {...}}` (quality/baseline_json mode) or `{"insight": "string"}` (fast mode) |
 | `/prompt` | POST | - | `{"prompt": "string"}` or `{"error": "string"}` |
 | `/session/history` | GET | - | `[{"entry": "string", "response": "string"}, ...]` |
 | `/session/reset` | POST | - | `{"status": "cleared"}` |
-| `/models` | GET | - | `{"generator": "...", "fallback": "...", "verifier": "...", "prompt": "...", "quality_mode_default": bool, "retrieval_enabled": bool}` |
+| `/models` | GET | - | `{"generator": "...", "fallback": "...", "verifier": "...", "prompt": "...", "strategy": "...", "source": "...", "summary": "...", "available_models": [...], "system_profile": {...}, "quality_mode_default": bool, "retrieval_enabled": bool}` |
 
 **Input validation:**
 - `/analyze` rejects empty entries (400)
@@ -883,7 +937,6 @@ ai-health-journal/
 ├── llm_client.py          # Ollama client wrapper
 ├── generator_prompts.py   # Draft generation prompts
 ├── verifier_prompts.py    # Verification prompts
-├── rag_store.py           # Legacy RAG store (Chroma)
 ├── version.py             # Version information
 ├── chains/                # LangChain integrations
 │   └── insight_chain.py   # LangChain insight chain
@@ -897,11 +950,12 @@ ai-health-journal/
 │   ├── rules.json         # Behavior rules
 │   ├── failure_patterns.json # Failure patterns
 │   └── few_shot.jsonl     # Few-shot examples
-├── vector_store/          # Vector store module
-│   ├── factory.py         # Vector store factory
-│   ├── base.py            # Base interface
-│   ├── chroma_store.py    # Chroma implementation
-│   └── pinecone_store.py  # Pinecone implementation
+├── vector_store/          # Unified retrieval surface
+│   ├── base.py            # VectorStore ABC + RetrievalHit dataclass
+│   ├── factory.py         # Returns the configured backend (or noop)
+│   ├── noop_store.py      # Silent no-op backend
+│   ├── chroma_store.py    # Local Chroma (./storage/chroma/)
+│   └── pinecone_store.py  # Pinecone cloud
 ├── evals/                 # Evaluation pipeline
 │   ├── run_evals.py       # Run evaluations
 │   ├── build_dpo_dataset.py  # Build DPO pairs

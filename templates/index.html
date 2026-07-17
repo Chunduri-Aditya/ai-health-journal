@@ -7,14 +7,17 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode">🌃 Theme</div>
-  <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history">📜 History</div>
+  <!-- Toast container -->
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <button class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌃 Theme</button>
+  <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history" aria-label="Toggle history sidebar">📜 History</button>
 
   <div class="layout">
     <!-- Main Journal Area -->
     <div class="container">
       <h1>🧠 AI Health Journal</h1>
-      
+
       <!-- Model and Quality Controls -->
       <div class="controls-group">
         <div class="control-item">
@@ -26,144 +29,406 @@
         </div>
         <div class="control-item" style="position: relative;">
           <input type="checkbox" id="quality-mode-toggle" checked>
-          <label for="quality-mode-toggle">Quality Mode (Verify + Revise)</label>
-          <span class="info-icon" title="Click for details" onclick="toggleQualityInfo()">ℹ️</span>
-          <div id="quality-info" class="quality-info-tooltip" style="display: none;">
+          <label for="quality-mode-toggle">Quality Mode</label>
+          <button class="info-icon" title="What is Quality Mode?" onclick="toggleQualityInfo()" aria-expanded="false" aria-controls="quality-info">ℹ️</button>
+          <div id="quality-info" class="quality-info-tooltip" style="display: none;" role="tooltip">
             <div class="tooltip-content">
-              <strong>Quality Mode:</strong>
+              <strong>Quality Mode</strong>
               <ul>
-                <li><strong>✅ ON (Checked):</strong> Uses Draft → Verify → Revise pipeline for higher accuracy. Best for important entries, detailed analysis, or when accuracy matters most. <em>Slightly slower but more reliable.</em></li>
-                <li><strong>⚡ OFF (Unchecked):</strong> Single-model generation for faster responses. Best for quick drafts, casual journaling, or when speed is priority. <em>Faster but less refined.</em></li>
+                <li><strong>✅ ON:</strong> Draft → Verify → Revise pipeline. Higher accuracy, slightly slower.</li>
+                <li><strong>⚡ OFF:</strong> Single-pass generation. Faster, less refined.</li>
               </ul>
               <button onclick="toggleQualityInfo()" class="close-tooltip">Got it</button>
             </div>
           </div>
         </div>
+        <div id="model-recommendation" class="model-recommendation" aria-live="polite"></div>
       </div>
-      
-      <div id="insight-box"></div>
+
+      <!-- Stage progress indicator (quality mode only) -->
+      <div id="stage-indicator" class="stage-indicator" style="display:none;" aria-label="Analysis progress">
+        <div class="stage" id="stage-draft">✏️ Drafting</div>
+        <div class="stage-arrow">→</div>
+        <div class="stage" id="stage-verify">🔍 Verifying</div>
+        <div class="stage-arrow">→</div>
+        <div class="stage" id="stage-revise">✨ Refining</div>
+      </div>
+
+      <!-- Insight / analysis output -->
+      <div id="insight-box" role="region" aria-label="Analysis output" aria-live="polite"></div>
+
+      <!-- Sources (RAG) -->
       <div id="sources-container" style="display:none;">
-        <button id="sources-toggle" onclick="toggleSources()">
-          🔍 Show sources
-        </button>
+        <button id="sources-toggle" onclick="toggleSources()">🔍 Show sources</button>
         <div id="sources-list"></div>
       </div>
-      <textarea id="journal-entry" placeholder="Write your thoughts here..." autofocus></textarea>
 
-      <div class="record-controls">
-        <button id="record-button" onclick="toggleRecording()" class="btn-success">
-          🎙️ Record
-        </button>
-        <span id="record-status"></span>
+      <!-- Journal entry textarea -->
+      <div class="textarea-wrapper">
+        <textarea
+          id="journal-entry"
+          placeholder="Write your thoughts here..."
+          autofocus
+          maxlength="1000"
+          aria-label="Journal entry"
+        ></textarea>
+        <div class="textarea-meta">
+          <span class="keyboard-hint">Enter to analyze &nbsp;·&nbsp; Shift+Enter for new line</span>
+          <span id="char-counter" class="char-counter">0 / 1000</span>
+        </div>
       </div>
 
+      <!-- Voice recording -->
+      <div class="record-controls">
+        <button id="record-button" onclick="toggleRecording()" class="btn-success" aria-label="Start voice recording">
+          🎙️ Record
+        </button>
+        <span id="record-status" aria-live="polite"></span>
+      </div>
+
+      <!-- Action buttons -->
       <div class="button-group">
-        <button onclick="submitEntry()" class="btn-primary">🦤 Analyze</button>
+        <button onclick="submitEntry()" class="btn-primary" id="analyze-btn">🦤 Analyze</button>
         <button onclick="getPrompt()" class="btn-secondary">✨ Prompt</button>
-        <button onclick="abortResponse()" id="stop-button" class="btn-secondary" disabled>🛑 Stop</button>
+        <button onclick="abortResponse()" id="stop-button" class="btn-secondary" disabled aria-label="Stop current analysis">🛑 Stop</button>
         <button onclick="newSession()" class="btn-danger">🧹 New Session</button>
       </div>
     </div>
 
     <!-- Chat History Sidebar -->
-    <div id="sidebar" class="hidden">
-      <h2>📜 Chat History</h2>
-      <ul id="history-list"></ul>
+    <div id="sidebar" class="hidden" aria-label="Chat history">
+      <h2>📜 History</h2>
+      <ul id="history-list" role="list"></ul>
+      <!-- Expanded history detail view -->
+      <div id="history-detail" class="history-detail" style="display:none;">
+        <button class="history-detail-close" onclick="closeHistoryDetail()">✕ Close</button>
+        <div id="history-detail-entry" class="history-detail-entry"></div>
+        <div id="history-detail-insight" class="history-detail-insight"></div>
+      </div>
       <button onclick="newSession()" class="btn-danger" style="width: 100%; margin-top: 1rem;">🧹 New Session</button>
     </div>
   </div>
 
   <script>
+    // ─── State ───────────────────────────────────────────────────────────────
     let controller;
     let sessionHistory = [];
     let mediaRecorder = null;
     let audioChunks = [];
     let isRecording = false;
+    let stageTimer = null;
 
-    const entryBox = document.getElementById("journal-entry");
-    const insightBox = document.getElementById("insight-box");
-    const stopBtn = document.getElementById("stop-button");
-    const historyList = document.getElementById("history-list");
-    const recordBtn = document.getElementById("record-button");
+    // ─── DOM refs ────────────────────────────────────────────────────────────
+    const entryBox     = document.getElementById("journal-entry");
+    const insightBox   = document.getElementById("insight-box");
+    const stopBtn      = document.getElementById("stop-button");
+    const historyList  = document.getElementById("history-list");
+    const recordBtn    = document.getElementById("record-button");
     const recordStatus = document.getElementById("record-status");
+    const charCounter  = document.getElementById("char-counter");
+    const analyzeBtn   = document.getElementById("analyze-btn");
 
+    // ─── Toast system ─────────────────────────────────────────────────────────
+    function showToast(message, type = "info", duration = 3000) {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      // Trigger enter animation
+      requestAnimationFrame(() => toast.classList.add("toast-visible"));
+      setTimeout(() => {
+        toast.classList.remove("toast-visible");
+        toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+      }, duration);
+    }
+
+    // ─── Theme ───────────────────────────────────────────────────────────────
     function toggleTheme() {
       document.body.classList.toggle("dark-mode");
     }
 
+    // ─── Sidebar ─────────────────────────────────────────────────────────────
     function toggleSidebar() {
-      const sidebar = document.getElementById("sidebar");
-      sidebar.classList.toggle("hidden");
+      document.getElementById("sidebar").classList.toggle("hidden");
     }
 
+    // ─── Char counter ─────────────────────────────────────────────────────────
+    entryBox.addEventListener("input", () => {
+      const len = entryBox.value.length;
+      charCounter.textContent = `${len} / 1000`;
+      charCounter.className = "char-counter" + (len > 900 ? " char-warn" : "") + (len >= 1000 ? " char-limit" : "");
+    });
+
+    // ─── Quality mode stage indicator ────────────────────────────────────────
+    function startStageIndicator() {
+      const indicator = document.getElementById("stage-indicator");
+      indicator.style.display = "flex";
+      setStage("draft");
+      // Approximate stage transitions (purely visual — server doesn't stream stages)
+      stageTimer = setTimeout(() => setStage("verify"), 6000);
+      stageTimer = setTimeout(() => setStage("revise"), 14000);
+    }
+
+    function setStage(stage) {
+      ["draft", "verify", "revise"].forEach(s => {
+        const el = document.getElementById(`stage-${s}`);
+        el.classList.remove("stage-active", "stage-done");
+      });
+      const stages = ["draft", "verify", "revise"];
+      const idx = stages.indexOf(stage);
+      stages.forEach((s, i) => {
+        const el = document.getElementById(`stage-${s}`);
+        if (i < idx)       el.classList.add("stage-done");
+        else if (i === idx) el.classList.add("stage-active");
+      });
+    }
+
+    function stopStageIndicator(success = true) {
+      clearTimeout(stageTimer);
+      if (success) {
+        setStage("revise");
+        ["draft","verify","revise"].forEach(s =>
+          document.getElementById(`stage-${s}`).classList.add("stage-done")
+        );
+      }
+      setTimeout(() => {
+        document.getElementById("stage-indicator").style.display = "none";
+      }, 1200);
+    }
+
+    // ─── Structured analysis renderer ────────────────────────────────────────
+    function renderAnalysisCards(analysis) {
+      if (!analysis) return null;
+
+      const el = document.createElement("div");
+      el.className = "analysis-cards";
+
+      // Summary
+      if (analysis.summary) {
+        const summary = document.createElement("p");
+        summary.className = "analysis-summary";
+        summary.textContent = analysis.summary;
+        el.appendChild(summary);
+      }
+
+      // Emotions
+      if (analysis.emotions && analysis.emotions.length) {
+        el.appendChild(buildSection("Emotions", () => {
+          const pills = document.createElement("div");
+          pills.className = "pill-group";
+          analysis.emotions.forEach(e => {
+            const pill = document.createElement("span");
+            pill.className = "pill pill-emotion";
+            pill.textContent = e;
+            pills.appendChild(pill);
+          });
+          return pills;
+        }));
+      }
+
+      // Patterns
+      if (analysis.patterns && analysis.patterns.length) {
+        el.appendChild(buildSection("Patterns", () => buildList(analysis.patterns, "pattern-list")));
+      }
+
+      // Triggers
+      if (analysis.triggers && analysis.triggers.length) {
+        el.appendChild(buildSection("Triggers", () => {
+          const pills = document.createElement("div");
+          pills.className = "pill-group";
+          analysis.triggers.forEach(t => {
+            const pill = document.createElement("span");
+            pill.className = "pill pill-trigger";
+            pill.textContent = t;
+            pills.appendChild(pill);
+          });
+          return pills;
+        }));
+      }
+
+      // Coping suggestions
+      if (analysis.coping_suggestions && analysis.coping_suggestions.length) {
+        el.appendChild(buildSection("Suggestions", () => buildList(analysis.coping_suggestions, "suggestions-list")));
+      }
+
+      // Footer: confidence + quotes
+      const footer = document.createElement("div");
+      footer.className = "analysis-footer";
+
+      if (typeof analysis.confidence === "number") {
+        const pct = Math.round(analysis.confidence * 100);
+        const badge = document.createElement("span");
+        badge.className = `confidence-badge ${pct >= 80 ? "conf-high" : pct >= 60 ? "conf-mid" : "conf-low"}`;
+        badge.textContent = `${pct}% confidence`;
+        footer.appendChild(badge);
+      }
+
+      if (analysis.quotes_from_user && analysis.quotes_from_user.length) {
+        const quotesBtn = document.createElement("button");
+        quotesBtn.className = "quotes-toggle btn-ghost";
+        quotesBtn.textContent = `💬 ${analysis.quotes_from_user.length} quote${analysis.quotes_from_user.length > 1 ? "s" : ""}`;
+        const quotesList = document.createElement("ul");
+        quotesList.className = "quotes-list";
+        quotesList.style.display = "none";
+        analysis.quotes_from_user.forEach(q => {
+          const li = document.createElement("li");
+          li.textContent = `"${q}"`;
+          quotesList.appendChild(li);
+        });
+        quotesBtn.onclick = () => {
+          const shown = quotesList.style.display !== "none";
+          quotesList.style.display = shown ? "none" : "block";
+          quotesBtn.textContent = shown
+            ? `💬 ${analysis.quotes_from_user.length} quote${analysis.quotes_from_user.length > 1 ? "s" : ""}`
+            : "💬 Hide quotes";
+        };
+        footer.appendChild(quotesBtn);
+        footer.appendChild(quotesList);
+      }
+
+      if (footer.children.length) el.appendChild(footer);
+
+      return el;
+    }
+
+    function buildSection(title, contentFn) {
+      const section = document.createElement("div");
+      section.className = "analysis-section";
+      const h = document.createElement("h3");
+      h.textContent = title;
+      section.appendChild(h);
+      section.appendChild(contentFn());
+      return section;
+    }
+
+    function buildList(items, cls) {
+      const ul = document.createElement("ul");
+      ul.className = cls;
+      items.forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        ul.appendChild(li);
+      });
+      return ul;
+    }
+
+    // ─── Submit ───────────────────────────────────────────────────────────────
     async function submitEntry() {
       const entry = entryBox.value.trim();
-      if (!entry) return;
+      if (!entry) { showToast("Write something first.", "warn"); return; }
 
       const model = document.getElementById("model-selector").value;
       const qualityMode = document.getElementById("quality-mode-toggle").checked;
 
       stopBtn.disabled = false;
-      insightBox.innerHTML = '<span class="thinking">Thinking' + (qualityMode ? ' (Quality Mode)...' : '...') + '</span>';
+      analyzeBtn.disabled = true;
+      insightBox.innerHTML = "";
+
+      if (qualityMode) {
+        startStageIndicator();
+      } else {
+        insightBox.innerHTML = '<span class="thinking">Thinking...</span>';
+      }
 
       controller = new AbortController();
       try {
         const response = await fetch("/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            entry,
-            model,
-            quality_mode: qualityMode
-          }),
+          body: JSON.stringify({ entry, model, quality_mode: qualityMode }),
           signal: controller.signal
         });
 
         const data = await response.json();
+        stopStageIndicator(!!data.insight);
+
         if (data.insight) {
-          revealTextSlowly(data.insight);
           if (data.analysis) {
-            renderSources(data.analysis);
+            const cards = renderAnalysisCards(data.analysis);
+            insightBox.innerHTML = "";
+            insightBox.appendChild(cards);
+            insightBox.classList.add("animate-in");
           } else {
-            renderSources(null);
+            revealTextSlowly(data.insight);
           }
-          storeMessage(entry, data.insight);
+          renderSources(data.analysis);
+          storeMessage(entry, data.insight, data.analysis);
         } else {
           insightBox.textContent = data.error || "Something went wrong.";
           renderSources(null);
+          showToast(data.error || "Analysis failed.", "error");
         }
-      } catch {
-        insightBox.textContent = "Request canceled or failed.";
+      } catch (err) {
+        stopStageIndicator(false);
+        if (err.name !== "AbortError") {
+          insightBox.textContent = "Request failed. Check that Ollama is running.";
+          showToast("Request failed.", "error");
+        } else {
+          insightBox.textContent = "";
+          showToast("Analysis stopped.", "info");
+        }
       }
 
       entryBox.value = "";
+      charCounter.textContent = "0 / 1000";
+      charCounter.className = "char-counter";
       stopBtn.disabled = true;
+      analyzeBtn.disabled = false;
     }
-    
-    // Load available models on page load
+
+    // ─── Models ───────────────────────────────────────────────────────────────
     async function loadModels() {
       try {
         const response = await fetch("/models");
         const data = await response.json();
         const selector = document.getElementById("model-selector");
-        
-        // Update options if needed
-        if (data.generator) {
-          selector.innerHTML = `<option value="${data.generator}">${data.generator} (Generator)</option>`;
-          if (data.prompt && data.prompt !== data.generator) {
-            selector.innerHTML += `<option value="${data.prompt}">${data.prompt} (Prompt)</option>`;
+        const recommendationEl = document.getElementById("model-recommendation");
+
+        const availableModels = Array.isArray(data.available_models) && data.available_models.length
+          ? data.available_models
+          : [data.generator, data.prompt].filter(Boolean);
+
+        if (availableModels.length) {
+          selector.innerHTML = "";
+          availableModels.forEach((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name === data.generator ? `${name} (Recommended)` : name;
+            selector.appendChild(option);
+          });
+          if (data.generator) {
+            selector.value = data.generator;
           }
         }
-      } catch (error) {
-        // Silently fail - use defaults
+
+        if (recommendationEl && data.summary) {
+          const profile = data.system_profile || {};
+          const memory = typeof profile.total_memory_gb === "number" && profile.total_memory_gb > 0
+            ? `${profile.total_memory_gb} GB RAM`
+            : "memory unknown";
+          const machineTier = profile.machine_tier || "auto";
+          const missing = Array.isArray(data.missing_preferred) && data.missing_preferred.length
+            ? ` Missing recommended models: ${data.missing_preferred.join(", ")}.`
+            : "";
+          recommendationEl.textContent =
+            `${data.summary} Machine profile: ${machineTier}, ${memory}. Prompt model: ${data.prompt}.` + missing;
+        }
+
+        if (data.quality_mode_default !== undefined) {
+          document.getElementById("quality-mode-toggle").checked = data.quality_mode_default;
+        }
+      } catch {
+        // Silently use defaults
       }
     }
-    
+
     window.addEventListener("load", () => {
       loadSessionHistory();
       loadModels();
     });
 
+    // ─── Typewriter (legacy / plain text mode) ────────────────────────────────
     function revealTextSlowly(text) {
       insightBox.textContent = "";
       const words = text.split(" ");
@@ -171,88 +436,122 @@
       const interval = setInterval(() => {
         if (i >= words.length) return clearInterval(interval);
         insightBox.textContent += words[i++] + " ";
-      }, 80);
+      }, 60);
     }
 
-    function storeMessage(entry, insight) {
-      const title = entry.split(" ").slice(0, 5).join(" ") + (entry.split(" ").length > 5 ? "..." : "");
-      sessionHistory.unshift({ title, entry, insight });
+    // ─── History ──────────────────────────────────────────────────────────────
+    function storeMessage(entry, insight, analysis) {
+      const words = entry.split(" ");
+      const title = words.slice(0, 5).join(" ") + (words.length > 5 ? "…" : "");
+      sessionHistory.unshift({ title, entry, insight, analysis });
       renderHistory();
     }
 
     function renderHistory() {
       historyList.innerHTML = "";
-      for (let item of sessionHistory) {
+      sessionHistory.forEach((item, idx) => {
         const li = document.createElement("li");
         li.className = "message-entry";
+        li.setAttribute("role", "button");
+        li.setAttribute("tabindex", "0");
         li.textContent = item.title;
-        li.onclick = () => alert(`📝 ${item.entry}\n\n💡 ${item.insight}`);
+        li.onclick = () => showHistoryDetail(idx);
+        li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") showHistoryDetail(idx); };
         historyList.appendChild(li);
-      }
+      });
     }
 
+    function showHistoryDetail(idx) {
+      const item = sessionHistory[idx];
+      const detail = document.getElementById("history-detail");
+      document.getElementById("history-detail-entry").textContent = item.entry;
+      const insightEl = document.getElementById("history-detail-insight");
+      insightEl.innerHTML = "";
+      if (item.analysis) {
+        const cards = renderAnalysisCards(item.analysis);
+        if (cards) insightEl.appendChild(cards);
+      } else {
+        insightEl.textContent = item.insight;
+      }
+      detail.style.display = "block";
+      detail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function closeHistoryDetail() {
+      document.getElementById("history-detail").style.display = "none";
+    }
+
+    // ─── Abort ────────────────────────────────────────────────────────────────
     function abortResponse() {
       if (controller) controller.abort();
       stopBtn.disabled = true;
+      analyzeBtn.disabled = false;
     }
 
+    // ─── Prompt suggestion ────────────────────────────────────────────────────
     async function getPrompt() {
       try {
         const res = await fetch("/prompt", { method: "POST" });
         const data = await res.json();
         if (data.prompt) {
           entryBox.value = data.prompt;
+          entryBox.dispatchEvent(new Event("input"));
           entryBox.focus();
+        } else {
+          showToast("Could not get a prompt.", "error");
         }
       } catch {
-        alert("Failed to get a prompt.");
+        showToast("Failed to get a prompt.", "error");
       }
     }
 
+    // ─── Session ──────────────────────────────────────────────────────────────
     async function loadSessionHistory() {
       try {
         const response = await fetch("/session/history");
         const backendHistory = await response.json();
         if (Array.isArray(backendHistory) && backendHistory.length > 0) {
-          sessionHistory = [];
-          for (let item of backendHistory) {
-            const title = item.entry.split(" ").slice(0, 5).join(" ") + (item.entry.split(" ").length > 5 ? "..." : "");
-            sessionHistory.push({ title, entry: item.entry, insight: item.response });
-          }
+          sessionHistory = backendHistory.map(item => {
+            const words = item.entry.split(" ");
+            return {
+              title: words.slice(0, 5).join(" ") + (words.length > 5 ? "…" : ""),
+              entry: item.entry,
+              insight: item.response,
+              analysis: item.analysis_json || null
+            };
+          });
           renderHistory();
         }
-      } catch (error) {
-        // Silently fail if session history can't be loaded
+      } catch {
+        // Silently fail
       }
     }
 
     async function newSession() {
       try {
         await fetch("/session/reset", { method: "POST" });
-      } catch (error) {
+      } catch {
         // Continue even if reset fails
       }
       sessionHistory = [];
       historyList.innerHTML = "";
-      insightBox.textContent = "";
-      alert("🧹 New session started.");
+      insightBox.innerHTML = "";
+      closeHistoryDetail();
+      showToast("New session started.", "success");
     }
 
-
+    // ─── Voice recording ──────────────────────────────────────────────────────
     async function toggleRecording() {
       if (isRecording) {
-        // Stop recording
         isRecording = false;
         recordBtn.textContent = "🎙️ Record";
         recordStatus.textContent = "";
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          mediaRecorder.stop();
-        }
+        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
         return;
       }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("Microphone access is not supported in this browser.");
+        showToast("Microphone not supported in this browser.", "error");
         return;
       }
 
@@ -260,71 +559,59 @@
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunks = [];
         mediaRecorder = new MediaRecorder(stream);
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) {
-            audioChunks.push(event.data);
-          }
-        };
-
+        mediaRecorder.ondataavailable = (e) => { if (e.data?.size > 0) audioChunks.push(e.data); };
         mediaRecorder.onstop = async () => {
           const blob = new Blob(audioChunks, { type: "audio/webm" });
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach(t => t.stop());
           await sendForTranscription(blob);
         };
-
         mediaRecorder.start();
         isRecording = true;
         recordBtn.textContent = "⏹️ Stop";
-        recordStatus.textContent = "Recording... speak freely, then click Stop.";
+        recordStatus.textContent = "Recording… speak freely, then click Stop.";
       } catch (err) {
-        console.error(err);
-        alert("Could not access microphone.");
+        showToast("Could not access microphone.", "error");
       }
     }
 
     async function sendForTranscription(blob) {
-      recordStatus.textContent = "Transcribing...";
+      recordStatus.textContent = "Transcribing…";
       try {
         const formData = new FormData();
         formData.append("audio", blob, "journal.webm");
-
-        const res = await fetch("/transcribe", {
-          method: "POST",
-          body: formData,
-        });
-
+        const res = await fetch("/transcribe", { method: "POST", body: formData });
         const data = await res.json();
         if (res.ok && data.text) {
           const current = entryBox.value.trim();
           entryBox.value = (current ? current + "\n" : "") + data.text;
+          entryBox.dispatchEvent(new Event("input"));
           recordStatus.textContent = `Transcribed (${data.language}). You can edit before analyzing.`;
         } else {
           recordStatus.textContent = "Transcription failed.";
+          showToast("Transcription failed.", "error");
         }
-      } catch (err) {
-        console.error(err);
+      } catch {
         recordStatus.textContent = "Transcription failed.";
+        showToast("Transcription failed.", "error");
       }
     }
 
+    // ─── Sources ──────────────────────────────────────────────────────────────
     function renderSources(analysis) {
       const container = document.getElementById("sources-container");
-      const list = document.getElementById("sources-list");
-      const toggle = document.getElementById("sources-toggle");
-      if (!analysis || !Array.isArray(analysis.grounding_sources) || analysis.grounding_sources.length === 0) {
+      const list      = document.getElementById("sources-list");
+      const toggle    = document.getElementById("sources-toggle");
+      if (!analysis || !Array.isArray(analysis.grounding_sources) || !analysis.grounding_sources.length) {
         container.style.display = "none";
         list.innerHTML = "";
         return;
       }
-      const mode = analysis.grounding_mode || "local_chroma";
-      const label = mode === "pinecone"
-        ? "Pinecone (vectors; text from redacted local cache)"
-        : "Local Chroma";
-      let html = `<div style="opacity:0.8;margin-bottom:4px;">Sources (${label}):</div>`;
-      analysis.grounding_sources.forEach((s, idx) => {
+      const mode  = analysis.grounding_mode || "local_chroma";
+      const label = mode === "pinecone" ? "Pinecone" : "Local Chroma";
+      let html = `<div class="sources-label">Sources (${label}):</div>`;
+      analysis.grounding_sources.forEach((s, i) => {
         const score = typeof s.score === "number" ? s.score.toFixed(3) : s.score;
-        html += `<div>[#${idx + 1}] score=${score} ts=${s.ts || "n/a"} – ${s.preview}</div>`;
+        html += `<div class="source-item">[#${i + 1}] score=${score} – ${s.preview}</div>`;
       });
       list.innerHTML = html;
       container.style.display = "block";
@@ -333,33 +620,36 @@
     }
 
     function toggleSources() {
-      const list = document.getElementById("sources-list");
+      const list   = document.getElementById("sources-list");
       const toggle = document.getElementById("sources-toggle");
-      const visible = list.style.display !== "none";
-      list.style.display = visible ? "none" : "block";
-      toggle.textContent = visible ? "🔍 Show sources" : "🔍 Hide sources";
+      const shown  = list.style.display !== "none";
+      list.style.display = shown ? "none" : "block";
+      toggle.textContent = shown ? "🔍 Show sources" : "🔍 Hide sources";
     }
 
+    // ─── Quality mode tooltip ─────────────────────────────────────────────────
+    function toggleQualityInfo() {
+      const info = document.getElementById("quality-info");
+      const btn  = document.querySelector(".info-icon");
+      const open = info.style.display === "none";
+      info.style.display = open ? "block" : "none";
+      btn.setAttribute("aria-expanded", open);
+    }
 
-    // Submit on Enter key
-    entryBox.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        submitEntry();
+    document.addEventListener("click", (e) => {
+      const info = document.getElementById("quality-info");
+      const icon = document.querySelector(".info-icon");
+      if (info && !info.contains(e.target) && !icon.contains(e.target)) {
+        info.style.display = "none";
+        icon.setAttribute("aria-expanded", "false");
       }
     });
 
-    function toggleQualityInfo() {
-      const info = document.getElementById("quality-info");
-      info.style.display = info.style.display === "none" ? "block" : "none";
-    }
-
-    // Close tooltip when clicking outside
-    document.addEventListener("click", function(event) {
-      const info = document.getElementById("quality-info");
-      const icon = document.querySelector(".info-icon");
-      if (info && !info.contains(event.target) && !icon.contains(event.target)) {
-        info.style.display = "none";
+    // ─── Keyboard shortcuts ───────────────────────────────────────────────────
+    entryBox.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitEntry();
       }
     });
   </script>

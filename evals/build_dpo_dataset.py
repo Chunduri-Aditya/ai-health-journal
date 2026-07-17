@@ -279,27 +279,186 @@ def build_dpo_pairs(baseline_results_path: str, quality_results_path: str, outpu
         'num_pairs': len(pairs)
     }
 
+def build_dpo_pairs_claude_chosen(
+    baseline_results_path: str,
+    claude_results_path: str,
+    output_path: str,
+    use_baseline_json: bool = False,
+) -> Dict[str, Any]:
+    """
+    Build DPO pairs with Claude output as 'chosen' and Ollama baseline as 'rejected'.
+
+    This is the offline distillation surface: phi3 (or whichever local model)
+    learns to imitate Claude's grounded, hedged, schema-valid output.
+
+    Cloud data provenance: document the judge model + version in RESULTS.md rows
+    whenever this path is used, so the metric's provenance is traceable.
+
+    Claude output must clear the same should_keep_pair guards as Ollama quality
+    output — no free pass.  The faithfulness + no_invention bar applies equally.
+
+    Note defect #14: if you ever add a Claude *baseline* target for DPO (to
+    produce a weaker "rejected" signal from Claude), it must be deliberately
+    weaker than this path (lower temperature, no validator_model) or pairs
+    will starve.
+    """
+    baseline_results = load_eval_results(baseline_results_path)
+    claude_results = load_eval_results(claude_results_path)
+
+    if claude_results.get("mode") != "claude":
+        raise ValueError(
+            f"Expected claude results file (mode='claude'), got mode='{claude_results.get('mode')}'. "
+            "Pass the output of run_evals.py --claude as --claude-results."
+        )
+
+    baseline_map: Dict[str, Any] = {
+        r.get("entry_id", r.get("entry", "")): r
+        for r in baseline_results.get("case_results", [])
+    }
+    claude_map: Dict[str, Any] = {
+        r.get("entry_id", r.get("entry", "")): r
+        for r in claude_results.get("case_results", [])
+    }
+
+    pairs = []
+    stats: Dict[str, Any] = {
+        "total_entries": 0,
+        "pairs_created": 0,
+        "pairs_filtered_out": 0,
+        "reasons": {},
+        "claude_model": claude_results.get("model", "unknown"),
+    }
+
+    common_ids = set(baseline_map.keys()) & set(claude_map.keys())
+    stats["total_entries"] = len(common_ids)
+
+    for entry_id in common_ids:
+        baseline_result = baseline_map[entry_id]
+        claude_result = claude_map[entry_id]
+
+        # Re-use the same guard logic — Claude output must pass the same bar.
+        should_keep, reason = should_keep_pair(
+            baseline_result,
+            # Reshape claude_result to match quality_result interface.
+            {
+                **claude_result,
+                "quality_output": claude_result.get("claude_output", ""),
+                "parse_failures": claude_result.get("parse_failures", 0),
+            },
+            use_baseline_json=use_baseline_json,
+        )
+
+        if not should_keep:
+            stats["pairs_filtered_out"] += 1
+            stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
+            continue
+
+        entry = claude_result.get("entry", baseline_result.get("entry", ""))
+        retrieved_context = claude_result.get("retrieved_context", "")
+        prompt = build_prompt(entry, retrieved_context)
+
+        chosen = claude_result.get("claude_output") or json.dumps(
+            claude_result.get("final_json", claude_result.get("analysis", {}))
+        )
+        if use_baseline_json:
+            rejected = (
+                baseline_result.get("baseline_json_output")
+                or baseline_result.get("baseline_output")
+                or json.dumps(baseline_result.get("analysis", {}))
+            )
+        else:
+            rejected = baseline_result.get("baseline_output") or json.dumps(
+                baseline_result.get("analysis", {})
+            )
+
+        pair = {
+            "prompt": prompt,
+            "chosen": chosen,
+            "rejected": rejected,
+            "metadata": {
+                "entry_id": entry_id,
+                "entry": entry,
+                "category": claude_result.get("category", "unknown"),
+                "chosen_source": "claude",
+                "claude_model": claude_results.get("model", "unknown"),
+                "claude_faithfulness": claude_result.get("metrics", {}).get("faithfulness", 0.0),
+                "claude_no_invention": claude_result.get("metrics", {}).get("no_invention", 0.0),
+                "baseline_faithfulness": baseline_result.get("metrics", {}).get("faithfulness", 0.0),
+                "baseline_no_invention": baseline_result.get("metrics", {}).get("no_invention", 0.0),
+            },
+        }
+
+        pairs.append(pair)
+        stats["pairs_created"] += 1
+
+    os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
+    with open(output_path, "w") as f:
+        for pair in pairs:
+            f.write(json.dumps(pair) + "\n")
+
+    sample_path = output_path.replace(".jsonl", ".sample.jsonl")
+    with open(sample_path, "w") as f:
+        for pair in pairs[:3]:
+            sample_pair = {
+                "prompt": pair["prompt"][:200] + "..." if len(pair["prompt"]) > 200 else pair["prompt"],
+                "chosen": pair["chosen"][:300] + "..." if len(pair["chosen"]) > 300 else pair["chosen"],
+                "rejected": pair["rejected"][:300] + "..." if len(pair["rejected"]) > 300 else pair["rejected"],
+                "metadata": pair["metadata"],
+            }
+            f.write(json.dumps(sample_pair) + "\n")
+
+    return {
+        "stats": stats,
+        "output_path": output_path,
+        "sample_path": sample_path,
+        "num_pairs": len(pairs),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description='Build DPO dataset from evaluation results')
     parser.add_argument('--baseline', type=str, default=None, help='Path to baseline (legacy) evaluation results JSON')
     parser.add_argument('--baseline_json', type=str, default=None, help='Path to baseline_json evaluation results JSON (preferred)')
-    parser.add_argument('--quality', type=str, required=True, help='Path to quality evaluation results JSON')
+    parser.add_argument('--quality', type=str, default=None, help='Path to quality evaluation results JSON (mutually exclusive with --claude-results)')
     parser.add_argument('--output', type=str, default='train/dpo_pairs.jsonl', help='Output path for DPO pairs JSONL')
+    # Offline teacher path — use Claude output as chosen signal.
+    parser.add_argument('--claude-results', type=str, default=None, help=(
+        'Path to claude evaluation results JSON (from run_evals.py --claude). '
+        'When supplied, uses Claude output as "chosen" instead of Ollama quality output. '
+        'Requires --baseline or --baseline_json as the "rejected" source.'
+    ))
     args = parser.parse_args()
-    
+
     if not args.baseline_json and not args.baseline:
         parser.error("Either --baseline_json or --baseline must be provided")
-    
+
     use_baseline_json = args.baseline_json is not None
     baseline_path = args.baseline_json or args.baseline
-    
-    print("Building DPO preference pairs...")
-    print(f"Baseline results: {baseline_path} ({'baseline_json' if use_baseline_json else 'baseline legacy'})")
-    print(f"Quality results: {args.quality}")
-    print(f"Output: {args.output}\n")
-    
-    result = build_dpo_pairs(baseline_path, args.quality, args.output, use_baseline_json=use_baseline_json)
-    
+
+    # Claude-as-chosen path
+    if args.claude_results:
+        print("Building DPO preference pairs (Claude as chosen)...")
+        print(f"Baseline results:  {baseline_path}")
+        print(f"Claude results:    {args.claude_results}")
+        print(f"Output:            {args.output}\n")
+
+        result = build_dpo_pairs_claude_chosen(
+            baseline_path,
+            args.claude_results,
+            args.output,
+            use_baseline_json=use_baseline_json,
+        )
+    else:
+        if not args.quality:
+            parser.error("--quality is required unless --claude-results is provided")
+
+        print("Building DPO preference pairs...")
+        print(f"Baseline results: {baseline_path} ({'baseline_json' if use_baseline_json else 'baseline legacy'})")
+        print(f"Quality results: {args.quality}")
+        print(f"Output: {args.output}\n")
+
+        result = build_dpo_pairs(baseline_path, args.quality, args.output, use_baseline_json=use_baseline_json)
+
     print("=" * 60)
     print("DPO Dataset Build Complete")
     print("=" * 60)

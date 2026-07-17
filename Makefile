@@ -1,7 +1,7 @@
 PY := python3
 VENV := venv
 
-.PHONY: setup setup-full setup-dev run test test-integration verify eval-smoke report demo clean deps-check distill-behavior
+.PHONY: setup setup-full setup-dev run test test-integration verify verify-rag rag-eval eval-smoke report demo clean deps-check distill-behavior
 
 setup:
 	$(PY) -m venv $(VENV)
@@ -28,6 +28,15 @@ verify:
 	. $(VENV)/bin/activate && \
 	  $(PY) -m compileall -q -x '(^|/)(archive|venv|\.git|__pycache__)/' . && \
 	  pytest
+
+verify-rag:
+	. $(VENV)/bin/activate && \
+	  pytest -q && \
+	  PYTHONPATH=. RETRIEVAL_ENABLED=true VECTOR_BACKEND=chroma $(PY) scripts/verify_rag.py
+
+rag-eval:
+	. $(VENV)/bin/activate && \
+	  PYTHONPATH=. RETRIEVAL_ENABLED=true VECTOR_BACKEND=chroma $(PY) evals/rag_retrieval_eval.py
 
 eval-smoke:
 	. $(VENV)/bin/activate && \

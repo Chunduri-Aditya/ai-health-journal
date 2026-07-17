@@ -75,7 +75,7 @@ Update this table as tracks complete:
 |----|------------|-------------|----------------------------------------------------|
 | 01 | not started |             |                                                    |
 | 02 | not started |             |                                                    |
-| 03 | not started |             |                                                    |
+| 03 | in progress (uncommitted) | local/main | `rag_store.py` deleted; `vector_store/` is the single retrieval surface; widened interface (namespace, filter_metadata, delete_entry, clear_namespace, healthcheck, RetrievalHit); per-namespace Chroma collections at `./storage/chroma/`; `/ping` reports `retrieval.backend/enabled/healthy`; contract tests expanded (59 passing). |
 | 04 | not started |             |                                                    |
 | 05 | not started |             |                                                    |
 | 06 | not started |             |                                                    |

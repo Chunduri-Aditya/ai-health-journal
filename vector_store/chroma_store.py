@@ -2,105 +2,184 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
-from .base import VectorStore
+from .base import RetrievalHit, VectorStore
 
-# Lazy import: chromadb is in requirements-optional.txt
 _CHROMA_AVAILABLE = False
 try:
     import chromadb
     from chromadb.config import Settings
     _CHROMA_AVAILABLE = True
 except ImportError:
-    # chromadb not installed - this is expected for core-only installs
     chromadb = None  # type: ignore
     Settings = None  # type: ignore
 except Exception as e:  # pragma: no cover - import guard
     _CHROMA_AVAILABLE = False
     chromadb = None  # type: ignore
     Settings = None  # type: ignore
-    logging.warning(
-        f"Chroma import failed. Error: {type(e).__name__}"
-    )
+    logging.warning(f"Chroma import failed. Error: {type(e).__name__}")
+
+
+_DEFAULT_NAMESPACE = "default"
+_COLLECTION_PREFIX = "ns__"
+# Chroma collection names must be 3-63 chars, [a-zA-Z0-9._-], start/end alnum.
+_COLLECTION_SAFE = re.compile(r"[^a-zA-Z0-9._-]")
+
+
+def _collection_name(namespace: str) -> str:
+    """Sanitize a namespace into a Chroma-safe collection name."""
+    ns = namespace or _DEFAULT_NAMESPACE
+    safe = _COLLECTION_SAFE.sub("_", ns)
+    return f"{_COLLECTION_PREFIX}{safe}"[:63]
 
 
 class ChromaStore(VectorStore):
-    """Chroma-based local vector store, mirroring existing RAG behavior."""
+    """
+    Chroma-backed local vector store.
 
-    def __init__(self, namespace: str = "journal_entries") -> None:
+    Namespaces are implemented as *separate collections* (`ns__{namespace}`)
+    rather than metadata filters. Rationale: Chroma metadata filters force a
+    full-collection scan per query; per-collection isolation scales better
+    and matches Pinecone's per-namespace mental model.
+    """
+
+    def __init__(self, default_namespace: str = _DEFAULT_NAMESPACE) -> None:
         if not _CHROMA_AVAILABLE or chromadb is None:
             raise RuntimeError(
                 "Chroma backend selected but chromadb is not available.\n"
-                "Install optional dependencies: make setup-full\n"
-                "Or: pip install -r requirements-optional.txt"
+                "Install optional dependencies: make setup-full"
             )
 
-        self.enabled: bool = True
-        self._client = None
-        self._collection = None
-        self._namespace = namespace
-
-        persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./rag_store")
+        # Default path aligns with upgrade 02's ./storage/ home.
+        # CHROMA_PERSIST_DIR still honored for migrations.
+        self._persist_dir = os.getenv("CHROMA_PERSIST_DIR", "./storage/chroma")
+        self._default_namespace = default_namespace or _DEFAULT_NAMESPACE
 
         try:
+            os.makedirs(self._persist_dir, exist_ok=True)
             self._client = chromadb.PersistentClient(
-                path=persist_dir,
+                path=self._persist_dir,
                 settings=Settings(anonymized_telemetry=False),
             )
-            self._collection = self._client.get_or_create_collection(
-                name=namespace,
-                metadata={"description": f"Journal entries and insights ({namespace})"},
-            )
-            logging.info(f"ChromaStore initialized at {persist_dir}")
+            logging.info(f"ChromaStore initialized at {self._persist_dir}")
         except Exception as e:
             logging.error(f"Failed to initialize ChromaStore: {e}")
-            raise RuntimeError(f"Failed to initialize ChromaStore: {e}")
+            raise RuntimeError(f"Failed to initialize ChromaStore: {e}") from e
 
-    def add_entry(self, entry_id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
-        if not self.enabled or not self._collection:
-            return
+    # ── VectorStore properties ────────────────────────────────────────────────
+    @property
+    def enabled(self) -> bool:
+        return True
 
+    @property
+    def backend_name(self) -> str:
+        return "chroma"
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+    def _resolve_namespace(self, namespace: Optional[str]) -> str:
+        return namespace or self._default_namespace
+
+    def _get_collection(self, namespace: Optional[str]):
+        ns = self._resolve_namespace(namespace)
+        return self._client.get_or_create_collection(
+            name=_collection_name(ns),
+            metadata={"description": f"journal_entries (ns={ns})"},
+        )
+
+    @staticmethod
+    def _distance_to_score(distance: Any) -> float:
         try:
-            meta = metadata or {}
-            self._collection.add(documents=[text], ids=[entry_id], metadatas=[meta])
+            d = float(distance)
+        except (TypeError, ValueError):
+            return 0.0
+        return 1.0 / (1.0 + d)
+
+    # ── VectorStore methods ───────────────────────────────────────────────────
+    def add_entry(
+        self,
+        entry_id: str,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        *,
+        namespace: Optional[str] = None,
+    ) -> None:
+        try:
+            coll = self._get_collection(namespace)
+            meta = dict(metadata or {})
+            meta.setdefault("namespace", self._resolve_namespace(namespace))
+            coll.add(documents=[text], ids=[entry_id], metadatas=[meta])
         except Exception as e:
-            logging.error(f"Failed to add entry to ChromaStore: {e}")
+            logging.error(f"Chroma add_entry failed: {e}")
 
-    def query(self, text: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        if not self.enabled or not self._collection:
+    def query(
+        self,
+        text: str,
+        *,
+        top_k: int = 3,
+        namespace: Optional[str] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[RetrievalHit]:
+        if top_k <= 0:
             return []
-
         try:
+            coll = self._get_collection(namespace)
             n_results = max(1, min(top_k, 10))
-            results = self._collection.query(
-                query_texts=[text],
-                n_results=n_results,
-                include=["documents", "metadatas", "distances", "ids"],
-            )
+            kwargs: Dict[str, Any] = {
+                "query_texts": [text],
+                "n_results": n_results,
+                "include": ["documents", "metadatas", "distances"],
+            }
+            if filter_metadata:
+                kwargs["where"] = dict(filter_metadata)
+            results = coll.query(**kwargs)
         except Exception as e:
-            logging.error(f"Failed to query ChromaStore: {e}")
+            logging.error(f"Chroma query failed: {e}")
             return []
 
-        docs = results.get("documents", [[]])[0] if results.get("documents") else []
-        metadatas = results.get("metadatas", [[]])[0] if results.get("metadatas") else []
-        distances = results.get("distances", [[]])[0] if results.get("distances") else []
-        ids = results.get("ids", [[]])[0] if results.get("ids") else []
+        docs = (results.get("documents") or [[]])[0] or []
+        metadatas = (results.get("metadatas") or [[]])[0] or []
+        distances = (results.get("distances") or [[]])[0] or []
+        ids = (results.get("ids") or [[]])[0] or []
 
-        out: List[Dict[str, Any]] = []
-        for doc, meta, dist, _id in zip(docs, metadatas, distances, ids):
-            # Chroma returns a distance; convert to a similarity-ish score for interpretability.
-            try:
-                score = float(1.0 / (1.0 + float(dist)))
-            except Exception:
-                score = 0.0
-            out.append(
-                {
-                    "id": _id,
-                    "text": doc,
-                    "metadata": meta or {},
-                    "score": score,
-                }
+        hits: List[RetrievalHit] = []
+        for _id, doc, meta, dist in zip(ids, docs, metadatas, distances):
+            hits.append(
+                RetrievalHit(
+                    id=_id,
+                    text=doc or "",
+                    score=self._distance_to_score(dist),
+                    metadata=dict(meta or {}),
+                )
             )
-        return out
+        return hits[:top_k]
 
+    def delete_entry(
+        self,
+        entry_id: str,
+        *,
+        namespace: Optional[str] = None,
+    ) -> None:
+        try:
+            coll = self._get_collection(namespace)
+            coll.delete(ids=[entry_id])
+        except Exception as e:
+            logging.error(f"Chroma delete_entry failed: {e}")
+
+    def clear_namespace(self, namespace: str) -> None:
+        name = _collection_name(namespace or self._default_namespace)
+        try:
+            self._client.delete_collection(name=name)
+        except Exception as e:
+            # delete_collection raises if the collection doesn't exist;
+            # callers treat clear_namespace as idempotent.
+            logging.debug(f"Chroma clear_namespace({name}) no-op: {e}")
+
+    def healthcheck(self) -> bool:
+        try:
+            self._client.list_collections()
+            return True
+        except Exception as e:
+            logging.warning(f"Chroma healthcheck failed: {e}")
+            return False
