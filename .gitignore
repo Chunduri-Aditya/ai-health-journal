@@ -57,3 +57,5 @@ var/
 venv/
 wheels/
 .runtime/
+evals/logs/
+evals/reports/
