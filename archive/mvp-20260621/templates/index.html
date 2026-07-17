@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Health Journal</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <button class="chat-launcher hidden" type="button" id="chat-launcher" data-action="restore-chat" aria-label="Open chat">
+    <span>AI Health Journal</span>
+  </button>
+
+  <main class="app-shell" id="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">AI</div>
+        <div>
+          <h1>AI Health Journal</h1>
+          <p>Reflective journaling chatbot and local model benchmark lab.</p>
+        </div>
+      </div>
+      <div class="topbar-actions" aria-label="Chat controls">
+        <button class="ghost-button" type="button" id="human-button" data-action="talk-human">Talk to human</button>
+        <button class="ghost-button" type="button" id="export-button" data-action="export">Export</button>
+        <button class="ghost-button" type="button" id="focus-button" data-action="focus">Focus</button>
+        <button class="ghost-button" type="button" id="theme-button" data-action="theme">Theme</button>
+        <button class="ghost-button" type="button" id="minimize-button" data-action="minimize">Minimize</button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="chat-panel" aria-label="Chat workspace">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Conversation</p>
+            <h2>Journal Session</h2>
+          </div>
+          <div class="status-pill" id="model-status">Checking Ollama</div>
+        </div>
+
+        <div class="model-row">
+          <label class="field-label" for="model-select">Analysis model</label>
+          <select id="model-select" aria-label="Analysis model"></select>
+        </div>
+
+        <div class="step-strip" aria-label="Session progress">
+          <div class="step active"><span>1</span><strong>Choose model</strong></div>
+          <div class="step"><span>2</span><strong>Write entry</strong></div>
+          <div class="step"><span>3</span><strong>Review metrics</strong></div>
+        </div>
+
+        <section class="chat-transcript" id="chat-transcript" aria-live="polite" aria-label="Conversation messages">
+          <article class="empty-state-panel" id="empty-state">
+            <div>
+              <p class="eyebrow">Before you start</p>
+              <h2>Use this to reflect, compare models, and spot safety gaps.</h2>
+            </div>
+            <div class="empty-grid">
+              <div>
+                <strong>Can help with</strong>
+                <p>Emotional reflection, job-search stress, response quality checks, and model comparison.</p>
+              </div>
+              <div>
+                <strong>Cannot replace</strong>
+                <p>Therapy, medical advice, legal advice, or emergency help.</p>
+              </div>
+              <div>
+                <strong>Human fallback</strong>
+                <p>Use Talk to human any time the bot feels stuck, unsafe, or too generic.</p>
+              </div>
+            </div>
+            <div class="suggestion-row" id="suggestion-row" aria-label="Suggested prompts"></div>
+          </article>
+        </section>
+
+        <button class="scroll-latest hidden" type="button" id="scroll-latest" data-action="scroll-latest">Scroll to latest</button>
+
+        <section class="composer" aria-label="Message composer">
+          <textarea
+            id="journal-entry"
+            placeholder="Write what you are feeling about work, uncertainty, rejection, or next steps..."
+            aria-label="Journal message"
+          ></textarea>
+          <div class="composer-footer">
+            <span id="metric-characters">0 / 1000</span>
+            <div class="composer-actions">
+              <button class="ghost-button" type="button" id="new-session-button" data-action="new-session">New Chat</button>
+              <button class="secondary-button" type="button" id="prompt-button" data-action="prompt">Prompt</button>
+              <button class="danger-button" type="button" id="stop-button" data-action="stop" disabled>Stop</button>
+              <button class="primary-button" type="button" id="send-button" data-action="send" disabled>Send</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="run-metrics" aria-label="Run metrics">
+          <div class="metric-tile">
+            <span>Model</span>
+            <strong id="metric-model">-</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Last latency</span>
+            <strong id="metric-latency">-</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Messages</span>
+            <strong id="metric-messages">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <aside class="lab-panel" aria-label="Benchmark metrics">
+        <div class="panel-heading compact">
+          <div>
+            <p class="eyebrow">Benchmark</p>
+            <h2>Model Scoreboard</h2>
+          </div>
+        </div>
+
+        <div class="benchmark-summary" id="benchmark-summary">
+          <div class="metric-tile">
+            <span>Models</span>
+            <strong id="bench-models">-</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Best pass rate</span>
+            <strong id="bench-pass">-</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Best safety</span>
+            <strong id="bench-crisis">-</strong>
+          </div>
+          <div class="metric-tile">
+            <span>Fastest avg</span>
+            <strong id="bench-latency">-</strong>
+          </div>
+        </div>
+
+        <div class="score-table-wrap">
+          <table class="score-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Pass</th>
+                <th>Empathy</th>
+                <th>Latency</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-table">
+              <tr>
+                <td colspan="4">No benchmark report yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="command-panel">
+          <div class="command-heading">
+            <span>Run all local models</span>
+            <button class="mini-button" type="button" id="benchmark-copy-button" data-action="copy-benchmark">Copy</button>
+          </div>
+          <code id="benchmark-command">venv/bin/python evals/run_job_market_patient_eval.py --models all --base-url http://127.0.0.1:5000 --timeout 45</code>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "aih_conversation_v2";
+    const DRAFT_KEY = "aih_draft_v2";
+    const THEME_KEY = "aih_theme";
+
+    const suggestions = [
+      "I feel lost in this job market and need to understand what emotion I am avoiding.",
+      "I keep getting rejected after interviews and feel embarrassed talking about it.",
+      "I am worried AI is making my career path obsolete.",
+      "I need help because my job search is affecting my sleep and confidence."
+    ];
+
+    let controller;
+    let revealTimer;
+    let messages = [];
+    let feedback = {};
+
+    const appShell = document.getElementById("app-shell");
+    const launcher = document.getElementById("chat-launcher");
+    const transcript = document.getElementById("chat-transcript");
+    const emptyState = document.getElementById("empty-state");
+    const entryBox = document.getElementById("journal-entry");
+    const stopBtn = document.getElementById("stop-button");
+    const sendBtn = document.getElementById("send-button");
+    const modelSelect = document.getElementById("model-select");
+    const modelStatus = document.getElementById("model-status");
+    const scrollLatestBtn = document.getElementById("scroll-latest");
+    const metricModel = document.getElementById("metric-model");
+    const metricLatency = document.getElementById("metric-latency");
+    const metricCharacters = document.getElementById("metric-characters");
+    const metricMessages = document.getElementById("metric-messages");
+
+    function id() {
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function readStorage(key) {
+      try {
+        return window.localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function writeStorage(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch {
+        return;
+      }
+    }
+
+    function deleteStorage(key) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {
+        return;
+      }
+    }
+
+    function formatMs(value) {
+      if (!Number.isFinite(value)) return "-";
+      return `${Math.round(value)} ms`;
+    }
+
+    function persist() {
+      writeStorage(STORAGE_KEY, JSON.stringify({ messages, feedback }));
+    }
+
+    function restoreState() {
+      try {
+        const saved = JSON.parse(readStorage(STORAGE_KEY) || "{}");
+        messages = Array.isArray(saved.messages) ? saved.messages : [];
+        feedback = saved.feedback || {};
+      } catch {
+        messages = [];
+        feedback = {};
+      }
+      entryBox.value = readStorage(DRAFT_KEY) || "";
+      renderSuggestions();
+      renderMessages();
+      updateComposerState();
+    }
+
+    function renderSuggestions() {
+      const row = emptyState.querySelector("#suggestion-row");
+      if (!row) return;
+      row.innerHTML = "";
+      for (const suggestion of suggestions) {
+        const button = document.createElement("button");
+        button.className = "suggestion-chip";
+        button.type = "button";
+        button.textContent = suggestion;
+        button.onclick = () => {
+          entryBox.value = suggestion;
+          updateComposerState();
+          entryBox.focus();
+        };
+        row.appendChild(button);
+      }
+    }
+
+    function isNearBottom() {
+      return transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96;
+    }
+
+    function maybeScrollToLatest() {
+      if (isNearBottom()) {
+        transcript.scrollTop = transcript.scrollHeight;
+        scrollLatestBtn.classList.add("hidden");
+      } else {
+        scrollLatestBtn.classList.remove("hidden");
+      }
+    }
+
+    function scrollToLatest() {
+      transcript.scrollTop = transcript.scrollHeight;
+      scrollLatestBtn.classList.add("hidden");
+    }
+
+    function setStep(index) {
+      document.querySelectorAll(".step").forEach((step, stepIndex) => {
+        step.classList.toggle("active", stepIndex <= index);
+      });
+    }
+
+    function renderMessages() {
+      const keepBottom = isNearBottom();
+      transcript.classList.toggle("is-empty", messages.length === 0);
+      transcript.innerHTML = "";
+      if (!messages.length) {
+        transcript.appendChild(emptyState);
+      }
+
+      for (const message of messages) {
+        transcript.appendChild(renderMessage(message));
+      }
+
+      metricMessages.textContent = messages.length;
+      if (keepBottom) scrollToLatest();
+    }
+
+    function renderMessage(message) {
+      const article = document.createElement("article");
+      article.className = `message ${message.role}`;
+      article.setAttribute("aria-label", `${message.role} message`);
+
+      const header = document.createElement("div");
+      header.className = "message-header";
+      const who = document.createElement("strong");
+      who.textContent = message.role === "assistant" ? "Assistant" : "You";
+      const meta = document.createElement("span");
+      meta.textContent = message.model ? `${message.model} - ${formatMs(message.latency_ms)}` : "";
+      header.appendChild(who);
+      header.appendChild(meta);
+
+      const body = document.createElement("div");
+      body.className = "message-body";
+      const words = (message.text || "").split(/\s+/).filter(Boolean);
+      const isLong = message.role === "assistant" && words.length > 85 && message.collapsed !== false;
+      body.textContent = isLong ? `${words.slice(0, 85).join(" ")}...` : message.text;
+
+      article.appendChild(header);
+      article.appendChild(body);
+
+      if (message.loading) {
+        article.classList.add("loading");
+        body.textContent = "Thinking through the entry...";
+      }
+
+      if (message.role === "assistant" && !message.loading) {
+        const controls = document.createElement("div");
+        controls.className = "message-controls";
+        if (words.length > 85) {
+          const expand = document.createElement("button");
+          expand.className = "mini-button";
+          expand.type = "button";
+          expand.textContent = message.collapsed === false ? "Show less" : "Show more";
+          expand.onclick = () => {
+            message.collapsed = message.collapsed === false;
+            persist();
+            renderMessages();
+          };
+          controls.appendChild(expand);
+        }
+        controls.appendChild(messageButton("Copy", () => copyText(message.text)));
+        controls.appendChild(messageButton("Helpful", () => setFeedback(message.id, "up")));
+        controls.appendChild(messageButton("Needs work", () => setFeedback(message.id, "down")));
+        article.appendChild(controls);
+      }
+
+      return article;
+    }
+
+    function messageButton(label, handler) {
+      const button = document.createElement("button");
+      button.className = "mini-button";
+      button.type = "button";
+      button.textContent = label;
+      button.onclick = handler;
+      return button;
+    }
+
+    function addMessage(message) {
+      messages.push({ id: id(), collapsed: true, ...message });
+      persist();
+      renderMessages();
+      maybeScrollToLatest();
+      return messages[messages.length - 1].id;
+    }
+
+    function updateMessage(messageId, patch) {
+      messages = messages.map((message) => message.id === messageId ? { ...message, ...patch } : message);
+      persist();
+      renderMessages();
+    }
+
+    function setFeedback(messageId, value) {
+      feedback[messageId] = value;
+      persist();
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark-mode");
+      writeStorage(THEME_KEY, document.body.classList.contains("dark-mode") ? "dark" : "light");
+    }
+
+    function toggleWideMode() {
+      appShell.classList.toggle("wide-mode");
+    }
+
+    function minimizeChat() {
+      appShell.classList.add("hidden");
+      launcher.classList.remove("hidden");
+    }
+
+    function restoreChat() {
+      launcher.classList.add("hidden");
+      appShell.classList.remove("hidden");
+      entryBox.focus();
+    }
+
+    function talkToHuman() {
+      addMessage({
+        role: "assistant",
+        text: "Human fallback is available. Share this transcript with a clinician, coach, or trusted person. For immediate self-harm risk in the U.S., call or text 988 or contact emergency services.",
+        model: "support",
+        latency_ms: 0
+      });
+    }
+
+    async function loadModels() {
+      try {
+        const response = await fetch("/models");
+        const data = await response.json();
+        modelSelect.innerHTML = "";
+
+        for (const model of data.models || []) {
+          const option = document.createElement("option");
+          option.value = model.name;
+          option.textContent = model.name;
+          if (model.name === data.default_model) option.selected = true;
+          modelSelect.appendChild(option);
+        }
+
+        if (!modelSelect.options.length) {
+          const option = document.createElement("option");
+          option.value = data.default_model || "phi3:3.8b";
+          option.textContent = option.value;
+          modelSelect.appendChild(option);
+        }
+
+        modelStatus.textContent = data.ok ? `${modelSelect.options.length} models ready` : "Ollama unavailable";
+        metricModel.textContent = modelSelect.value || "-";
+      } catch {
+        modelStatus.textContent = "Model list unavailable";
+      }
+    }
+
+    async function loadBenchmark() {
+      try {
+        const response = await fetch("/benchmark/latest");
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const benchmark = data.benchmark || data;
+        const summaries = benchmark.model_summaries || [];
+        const byMetric = (metric, direction = "max") => {
+          const valid = summaries.filter((item) => Number.isFinite(item.summary?.[metric]));
+          return valid.sort((a, b) => direction === "min"
+            ? a.summary[metric] - b.summary[metric]
+            : b.summary[metric] - a.summary[metric])[0];
+        };
+        const bestPass = byMetric("case_pass_rate");
+        const safetyLeader = byMetric("crisis_case_support_rate");
+        const fastest = byMetric("avg_latency_ms", "min");
+        const table = document.getElementById("benchmark-table");
+        table.innerHTML = "";
+
+        document.getElementById("bench-models").textContent = summaries.length || "-";
+        document.getElementById("bench-pass").textContent = bestPass ? `${Math.round(bestPass.summary.case_pass_rate * 100)}%` : "-";
+        document.getElementById("bench-crisis").textContent = safetyLeader ? `${Math.round(safetyLeader.summary.crisis_case_support_rate * 100)}%` : "-";
+        document.getElementById("bench-latency").textContent = fastest ? formatMs(fastest.summary.avg_latency_ms) : "-";
+
+        for (const item of summaries) {
+          const row = document.createElement("tr");
+          const labels = ["Model", "Pass", "Empathy", "Latency"];
+          for (const [index, value] of [
+            item.model,
+            `${Math.round(item.summary.case_pass_rate * 100)}%`,
+            `${Math.round(item.summary.empathy_rate * 100)}%`,
+            formatMs(item.summary.avg_latency_ms)
+          ].entries()) {
+            const cell = document.createElement("td");
+            cell.dataset.label = labels[index];
+            cell.textContent = value;
+            row.appendChild(cell);
+          }
+          table.appendChild(row);
+        }
+      } catch {
+        return;
+      }
+    }
+
+    async function submitEntry() {
+      const entry = entryBox.value.trim();
+      if (!entry) return;
+
+      setStep(2);
+      addMessage({ role: "user", text: entry });
+      const assistantId = addMessage({ role: "assistant", text: "", loading: true, model: modelSelect.value });
+
+      writeStorage(DRAFT_KEY, "");
+      entryBox.value = "";
+      updateComposerState();
+      stopBtn.disabled = false;
+      sendBtn.disabled = true;
+      controller = new AbortController();
+      const startedAt = performance.now();
+
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entry, model: modelSelect.value }),
+          signal: controller.signal
+        });
+
+        const data = await response.json();
+        if (data.insight) {
+          const latency = data.latency_ms || performance.now() - startedAt;
+          metricModel.textContent = data.model || modelSelect.value;
+          metricLatency.textContent = formatMs(latency);
+          streamAssistantMessage(assistantId, data.insight, data.model || modelSelect.value, latency);
+        } else {
+          updateMessage(assistantId, {
+            loading: false,
+            text: `${data.error || "The assistant could not respond."} Try a different model or use Talk to human.`
+          });
+        }
+      } catch {
+        updateMessage(assistantId, {
+          loading: false,
+          text: "Request canceled or failed. Try again, choose another model, or use Talk to human."
+        });
+      }
+
+      stopBtn.disabled = true;
+      updateComposerState();
+    }
+
+    function streamAssistantMessage(messageId, fullText, model, latency) {
+      clearInterval(revealTimer);
+      let index = 0;
+      revealTimer = setInterval(() => {
+        index += 4;
+        const partial = fullText.split(" ").slice(0, index).join(" ");
+        updateMessage(messageId, {
+          loading: false,
+          text: partial,
+          model,
+          latency_ms: latency,
+          collapsed: false
+        });
+        maybeScrollToLatest();
+        if (index >= fullText.split(" ").length) {
+          clearInterval(revealTimer);
+          updateMessage(messageId, {
+            loading: false,
+            text: fullText,
+            model,
+            latency_ms: latency,
+            collapsed: true
+          });
+        }
+      }, 32);
+    }
+
+    function abortResponse() {
+      if (controller) controller.abort();
+      clearInterval(revealTimer);
+      stopBtn.disabled = true;
+      updateComposerState();
+    }
+
+    async function getPrompt() {
+      try {
+        const res = await fetch("/prompt", { method: "POST" });
+        const data = await res.json();
+        if (data.prompt) {
+          entryBox.value = data.prompt;
+          updateComposerState();
+          entryBox.focus();
+        }
+      } catch {
+        addMessage({ role: "assistant", text: "Prompt generation failed. Try a suggested prompt or write your own entry." });
+      }
+    }
+
+    function newSession() {
+      if (controller) controller.abort();
+      clearInterval(revealTimer);
+      messages = [];
+      feedback = {};
+      deleteStorage(STORAGE_KEY);
+      deleteStorage(DRAFT_KEY);
+      entryBox.value = "";
+      stopBtn.disabled = true;
+      persist();
+      renderSuggestions();
+      renderMessages();
+      transcript.replaceChildren(emptyState);
+      metricMessages.textContent = "0";
+      updateComposerState();
+      setStep(0);
+      fetch("/session/reset", { method: "POST" }).catch(() => {});
+    }
+
+    function updateComposerState() {
+      const length = entryBox.value.length;
+      metricCharacters.textContent = `${length} / 1000`;
+      sendBtn.disabled = length === 0 || length > 1000;
+      writeStorage(DRAFT_KEY, entryBox.value);
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        return;
+      }
+    }
+
+    function exportConversation() {
+      const payload = {
+        exported_at: new Date().toISOString(),
+        model: modelSelect.value,
+        messages,
+        feedback
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "ai-health-journal-conversation.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyBenchmarkCommand() {
+      const command = document.getElementById("benchmark-command").textContent;
+      await copyText(command);
+    }
+
+    const actions = {
+      "restore-chat": restoreChat,
+      "talk-human": talkToHuman,
+      "export": exportConversation,
+      "focus": toggleWideMode,
+      "theme": toggleTheme,
+      "minimize": minimizeChat,
+      "new-session": newSession,
+      "prompt": getPrompt,
+      "stop": abortResponse,
+      "send": submitEntry,
+      "scroll-latest": scrollToLatest,
+      "copy-benchmark": copyBenchmarkCommand
+    };
+
+    document.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      const button = target?.closest("button[data-action]");
+      if (!button || button.disabled) return;
+      const action = actions[button.dataset.action];
+      if (action) action();
+    });
+    entryBox.addEventListener("input", updateComposerState);
+    modelSelect.addEventListener("change", () => {
+      metricModel.textContent = modelSelect.value || "-";
+      setStep(1);
+    });
+    transcript.addEventListener("scroll", () => {
+      if (isNearBottom()) scrollLatestBtn.classList.add("hidden");
+    });
+    entryBox.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        submitEntry();
+      }
+    });
+
+    if (readStorage(THEME_KEY) === "dark") {
+      document.body.classList.add("dark-mode");
+    }
+
+    loadModels();
+    loadBenchmark();
+    restoreState();
+  </script>
+</body>
+</html>

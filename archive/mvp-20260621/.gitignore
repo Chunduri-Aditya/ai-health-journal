@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.runtime/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+venv/
+
+# Personal journal data — never commit (regenerates at runtime)
+chat_history.json
+data/
+evals/logs/
+*.log
