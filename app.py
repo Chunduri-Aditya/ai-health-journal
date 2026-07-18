@@ -75,16 +75,64 @@ BENCHMARK_LATEST_JSON = Path("evals/reports/job_market_patient_model_benchmark_l
 # self-harm phrasing forces the support path even if the verifier misses it or
 # its call failed, so the reframe/positivity path fails closed. Kept tight (first
 # person, reflexive) so idioms like "this job is killing me" do not trigger it.
+#
+# Coverage is asymmetric on purpose: a false positive here just shows a
+# supportive message on a non-crisis entry (mildly imprecise); a false
+# negative lets positivity/reframe reach a genuine crisis. So this errs
+# toward catching more real-world phrasing, while still requiring first-
+# person/reflexive structure to avoid firing on idioms or third-person
+# statements. Known gap, intentionally NOT covered: vaguer phrasing like
+# "I won't be here much longer" is too easily a benign statement (moving,
+# changing jobs) to regex safely -- that's left to the verifier's judgment.
+# Non-English phrasing is also not covered here; see verifier_prompts.py for
+# the verifier-side mitigation.
+#
+# Two additions were tried and dropped after live false-positive testing:
+# bare "kms" collides with the common tech acronym (AWS KMS -- a real risk
+# for exactly this app's job/work-stress journaling use case), and bare
+# "overdose" collides with the ordinary idiom "an overdose of X". Kept
+# instead: the more specific pills-object pattern below. One known accepted
+# false-positive tradeoff we DID keep: "jumping off a bridge" also matches
+# benign bungee-jumping journal entries -- kept anyway because catching
+# method-specific ideation outweighs an occasional unnecessary supportive
+# message (see the asymmetric-risk note above).
 _CRISIS_PATTERNS = re.compile(
     r"\b("
     r"kill(?:ing)?\s+myself|"
     r"end(?:ing)?\s+my\s+life|"
+    r"end(?:ing)?\s+it\s+all|"
     r"take\s+my\s+own\s+life|"
-    r"want\s+to\s+die|"
-    r"don'?t\s+want\s+to\s+(?:live|be\s+here|wake\s+up)|"
+    r"want(?:s|ed)?\s+to\s+die|"
+    r"wish\s+(?:i\s+was|i\s+were)\s+dead|"
+    r"better\s+off\s+(?:if\s+i\s+(?:was|were)\s+)?dead|"
+    r"give\s+up\s+on\s+life|"
+    r"(?:no\s+longer|don'?t)\s+want(?:s)?\s+to\s+exist|"
+    r"don'?t\s+want\s+to\s+(?:live|be\s+here|be\s+alive|wake\s+up)|"
     r"hurt(?:ing)?\s+myself|harm(?:ing)?\s+myself|"
+    r"unalive(?:\s+myself)?|"
     r"self[-\s]?harm|"
-    r"suicid(?:e|al)"
+    r"suicid(?:e|al)|"
+    r"overdos(?:e|ed|ing)\s+on\s+(?:my|the)\s+(?:pills|meds|medication)|"
+    r"tak(?:e|ing)\s+all\s+(?:my|the)\s+pills|"
+    r"jump(?:ing)?\s+off\s+(?:a|the)\s+bridge"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Deterministic floor for explicit, first-person, PLANNED intent to harm
+# someone else. Kept much narrower than _CRISIS_PATTERNS above: "I'm going to
+# kill him" / "he's going to kill me" is extremely common non-literal
+# hyperbole in everyday venting (annoyance, sibling teasing, sports trash
+# talk) in a way "I want to kill myself" essentially never is, so a bare verb
+# match here would false-positive constantly. Requires an explicit first-
+# person intent marker ("I'm going to" / "I'm planning to" / "I'll" or
+# "I will") directly attached to the harm clause -- catches deliberate
+# threats, not "that really hurt him badly" (third-person, emotional) or
+# "I'm going to kill him" (hyperbole, no specific harm verb + intensifier).
+_HARM_TO_OTHERS_PATTERNS = re.compile(
+    r"\b("
+    r"i(?:'m| am)\s+(?:going\s+to|planning\s+to)\s+(?:hurt|attack|harm)\s+(?:him|her|them)\b|"
+    r"i(?:'ll| will)\s+hurt\s+(?:him|her|them)\s+(?:badly|seriously|for\s+real)"
     r")\b",
     re.IGNORECASE,
 )
@@ -92,12 +140,17 @@ _CRISIS_PATTERNS = re.compile(
 # Product-owner editable. Shown INSTEAD of a reframe when the crisis gate fires.
 # Acknowledges without diagnosing and points outward. Set AIHJ_CRISIS_MESSAGE to
 # localize the resource line for your region.
-CRISIS_SUPPORT_MESSAGE = os.getenv(
-    "AIHJ_CRISIS_MESSAGE",
+# `or` (not getenv's default= param) so an explicitly BLANK env var
+# (AIHJ_CRISIS_MESSAGE="", a plausible operator misconfiguration -- vs.
+# simply leaving it unset) still falls back to the built-in message instead
+# of silently rendering a crisis entry with no support text and no reframe
+# at all. getenv's default= only applies when the var is absent, not when
+# it's present-but-empty.
+CRISIS_SUPPORT_MESSAGE = os.getenv("AIHJ_CRISIS_MESSAGE") or (
     "It sounds like you're carrying something really heavy right now, and you "
     "don't have to carry it alone. Please consider reaching out to a crisis line "
     "in your area or someone you trust. If you're in immediate danger, contact "
-    "local emergency services.",
+    "local emergency services."
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -175,9 +228,21 @@ def reset_session():
 # ── Routes: analysis ──────────────────────────────────────────────────────────
 @app.route("/analyze", methods=["POST"])
 def analyze_entry():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    # get_json(silent=True) returns None on unparseable JSON, and a bare
+    # value (list, str, number) on valid-but-non-object bodies. Both must be
+    # rejected here, before any .get()/.strip() call, or a malformed/wrong-
+    # typed client request crashes with an unhandled AttributeError instead
+    # of a clean 400 (Flask's bare default error page leaks internal detail
+    # in debug mode, and is the wrong content-type for a JSON API either way).
+    if not isinstance(data, dict):
+        return jsonify({"error": "✋ Please enter some thoughts before submitting."}), 400
+
+    entry = data.get("entry", "")
+    if not isinstance(entry, str):
+        return jsonify({"error": "✋ Please enter some thoughts before submitting."}), 400
+    journal_entry     = entry.strip()
     selection = get_runtime_model_selection(cfg)
-    journal_entry     = data.get("entry", "").strip()
     model             = data.get("model", selection.generator)
     quality_mode      = data.get("quality_mode", cfg.quality_mode_default)
     baseline_json_mode = data.get("baseline_json_mode", False)
@@ -234,7 +299,12 @@ def analyze_entry():
     except ValueError as e:
         err = str(e)
         if "json_parse_failed" in err:
-            return jsonify({"error": err}), 500
+            # The internal stage tag (e.g. "json_parse_failed:stage=draft")
+            # is logged for debugging but never returned to the client --
+            # it's implementation detail, not something a user needs, and
+            # every other branch here already uses a generic message.
+            logging.error(f"Pipeline JSON parse failure: {err}")
+            return jsonify({"error": "⚠️ Analysis failed. Please try again."}), 500
         logging.exception("ValueError in /analyze")
         return jsonify({"error": "⚠️ Analysis failed. Please try again."}), 500
     except requests.exceptions.Timeout:
@@ -309,16 +379,28 @@ def transcribe_audio():
 def _is_crisis(journal_entry: str, verdict: Dict[str, Any]) -> bool:
     """Crisis decision for the reframe gate.
 
-    Fails closed: fires if the verifier judged a crisis, if any safety flag names
-    self-harm, OR if the raw entry matches the reflexive self-harm floor. The
-    floor covers the case where the verifier call failed or missed it.
+    Fails closed: fires if the verifier judged a crisis, if any safety flag
+    names self-harm or harm to others, OR if the raw entry matches the
+    reflexive self-harm floor or the (narrower) harm-to-others floor. The
+    floors cover the case where the verifier call failed or missed it.
     """
     if verdict.get("crisis_detected"):
         return True
-    flags = " ".join(verdict.get("safety_flags", [])).lower()
-    if any(term in flags for term in ("self-harm", "self harm", "suicid", "harm to self")):
+    # Normalize separators so underscore/hyphen-styled flags ("self_harm_
+    # ideation") match the same as space-separated ones ("self harm
+    # ideation") -- the verifier's phrasing of a flag is not something we
+    # control, and a bare exact-substring match on 4 hardcoded strings missed
+    # every paraphrase tested (see tests/test_crisis_gate_adversarial.py).
+    flags = " ".join(verdict.get("safety_flags", [])).lower().replace("_", " ").replace("-", " ")
+    crisis_flag_terms = (
+        "self harm", "suicid", "harm to self", "danger to self", "self injury",
+        "harm ideation", "harm to others", "danger to others", "threat to others",
+    )
+    if any(term in flags for term in crisis_flag_terms):
         return True
-    return bool(_CRISIS_PATTERNS.search(journal_entry or ""))
+    if _CRISIS_PATTERNS.search(journal_entry or ""):
+        return True
+    return bool(_HARM_TO_OTHERS_PATTERNS.search(journal_entry or ""))
 
 
 def _apply_reframe_gate(
@@ -339,6 +421,26 @@ def _apply_reframe_gate(
     else:
         analysis_json.setdefault("crisis_support", False)
         analysis_json.setdefault("support_message", "")
+    return analysis_json
+
+
+def _strip_ungrounded_quotes(analysis_json: Dict[str, Any], journal_entry: str) -> Dict[str, Any]:
+    """Drop any quotes_from_user entry that isn't an exact substring of the
+    journal entry.
+
+    "Is this quote actually in the entry" needs no LLM judgment at all -- it
+    is 100% mechanically checkable, and the verifier cannot be trusted to
+    catch it alone (live-confirmed: a fabricated quote with zero grounding in
+    an off-topic entry passed verification with groundedness_score=0.95, see
+    tests/test_prompt_injection_adversarial.py). Deterministic logic in code
+    for a checkable property, not judgment in the model.
+    """
+    quotes = analysis_json.get("quotes_from_user") or []
+    grounded = [q for q in quotes if q in journal_entry]
+    dropped = [q for q in quotes if q not in journal_entry]
+    if dropped:
+        logging.warning(f"Dropped {len(dropped)} ungrounded quote(s) not present in the entry")
+    analysis_json["quotes_from_user"] = grounded
     return analysis_json
 
 
@@ -370,6 +472,8 @@ def _run_quality_pipeline(
     except Exception as e:
         logging.error(f"Draft generation failed: {type(e).__name__}")
         raise ValueError("json_parse_failed:stage=draft")
+
+    draft_json = _strip_ungrounded_quotes(draft_json, journal_entry)
 
     # Step 2: Verify — fix #12: validator_model enforces VerifierVerdict shape.
     try:
@@ -415,6 +519,7 @@ def _run_quality_pipeline(
                 validator_model=AnalysisOutput,
             )
             logging.info("Revision completed.")
+            final_json = _strip_ungrounded_quotes(final_json, journal_entry)
             return _apply_reframe_gate(final_json, journal_entry, verdict)
         except Exception as e:
             logging.error(f"Revision failed: {type(e).__name__}. Using original draft.")
@@ -590,11 +695,19 @@ def _hit_to_source(hit: "RetrievalHit") -> Dict[str, Any]:
 
 # ── Shared helpers: storage ───────────────────────────────────────────────────
 def _maybe_redact(text: str) -> str:
-    """Scrub PII before it lands in the local RAG store, when PRIVACY_MODE=strict.
+    """Scrub PII before it is persisted anywhere, when PRIVACY_MODE=strict.
 
-    Only `strict` redacts; any other mode (default `balanced`) stores raw text,
-    preserving current behavior. The trust boundary is local disk either way —
-    strict is defense-in-depth so the at-rest history carries no emails/phones.
+    Used by both the RAG store (_store_in_rag) and the client-side session
+    (_append_to_session) -- the session cookie is signed but NOT encrypted
+    (readable via base64 by anyone with cookie access: devtools, an
+    extension, XSS, a non-HTTPS hop), so it needs the same treatment as the
+    RAG store, not just a separate "it's local disk" trust boundary.
+
+    Only `strict` redacts; any other mode (default `balanced`) stores raw
+    text, preserving current behavior. Redaction narrows exposure to the
+    categories redact() actually catches (email, US-format phone) -- it does
+    not encrypt the cookie itself, so PII categories redact() doesn't cover
+    are still exposed in strict mode too.
     """
     if cfg.privacy_mode == "strict":
         return redact(text)
@@ -607,7 +720,7 @@ def _store_in_rag(
     *,
     entry_id: Optional[str] = None,
     namespace: Optional[str] = None,
-) -> None:
+) -> bool:
     """
     Index a journal entry for retrieval.
 
@@ -615,16 +728,23 @@ def _store_in_rag(
     blob. Rationale: we're retrieving *past entries* to ground the current one;
     insights are derivative and shouldn't dominate similarity scoring.
     The insight is kept on the metadata for future audit surfaces.
+
+    Returns True if the entry was actually indexed, False if the write
+    failed or retrieval is disabled. A write failure never raises here (the
+    LLM analysis already succeeded and must still reach the user; a failed
+    RAG write is a secondary concern) but it also must not be indistinguish-
+    able from success — the caller can check this to decide whether to warn
+    the user, retry, or just rely on the log line this also emits.
     """
     if not vector_store.enabled:
-        return
+        return False
     entry_id = entry_id or _new_entry_id()
     # PRIVACY_MODE=strict scrubs PII (emails, phones) before it is persisted to
     # the local RAG store, so the retrievable history and its metadata are
     # redacted at rest. Mode change is not retroactive: entries written under a
     # looser mode keep their original text. See _maybe_redact.
     stored_text = _maybe_redact(entry)
-    vector_store.add_entry(
+    ok = vector_store.add_entry(
         entry_id=entry_id,
         text=stored_text,
         metadata={
@@ -636,12 +756,26 @@ def _store_in_rag(
         },
         namespace=namespace,
     )
+    if not ok:
+        logging.warning(f"RAG write failed for entry_id={entry_id}; not indexed for retrieval")
+    return ok
 
 
 def _append_to_session(entry: str, response: str, analysis_json: Optional[Dict]) -> None:
+    """Persist one turn into the client-side session (history sidebar).
+
+    Routed through _maybe_redact for the same reason _store_in_rag is: the
+    session cookie is signed but not encrypted, so under PRIVACY_MODE=strict
+    it must not carry raw PII either. analysis_json is stored as-is (not
+    deep-redacted) -- matches the scope already established for the RAG
+    store's metadata, which only redacts the flat entry/insight text too.
+    """
     if "chat" not in session:
         session["chat"] = []
-    item: Dict[str, Any] = {"entry": entry, "response": response}
+    item: Dict[str, Any] = {
+        "entry": _maybe_redact(entry),
+        "response": _maybe_redact(response),
+    }
     if analysis_json is not None:
         item["analysis_json"] = analysis_json
     session["chat"].append(item)
@@ -681,4 +815,9 @@ def _get_version() -> str:
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # This is the app's actual launch path (make run / start.sh both run
+    # `python app.py`), not a dev-only branch -- debug must default OFF so an
+    # unhandled exception never returns the full Werkzeug debugger (source,
+    # local variables, a code-execution console) to whoever can reach the
+    # port. Opt in explicitly for local development: FLASK_DEBUG=true.
+    app.run(debug=os.getenv("FLASK_DEBUG", "false").lower() == "true")

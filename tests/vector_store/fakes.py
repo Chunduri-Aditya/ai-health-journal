@@ -64,10 +64,11 @@ class InMemoryVectorStore(VectorStore):
         metadata: Optional[Dict[str, Any]] = None,
         *,
         namespace: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         ns = self._ns(namespace)
         bucket = self._docs.setdefault(ns, {})
         bucket[entry_id] = (text, dict(metadata or {}))
+        return True
 
     def query(
         self,

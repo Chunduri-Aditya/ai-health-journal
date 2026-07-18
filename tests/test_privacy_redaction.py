@@ -16,8 +16,9 @@ class _CaptureStore:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def add_entry(self, entry_id=None, text="", metadata=None, namespace=None) -> None:
+    def add_entry(self, entry_id=None, text="", metadata=None, namespace=None) -> bool:
         self.calls.append({"text": text, "metadata": metadata or {}})
+        return True
 
 
 def test_strict_mode_redacts_entry_and_metadata(monkeypatch):

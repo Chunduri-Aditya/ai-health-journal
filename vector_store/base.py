@@ -53,8 +53,16 @@ class VectorStore(ABC):
         metadata: Optional[Dict[str, Any]] = None,
         *,
         namespace: Optional[str] = None,
-    ) -> None:
-        """Index a new text document with associated metadata."""
+    ) -> bool:
+        """Index a new text document with associated metadata.
+
+        Returns True on success, False if the write failed. Implementations
+        must not raise for backend-level failures (a RAG indexing failure
+        should not break the caller's primary response) -- they catch, log,
+        and return False so the caller can at least detect and log the
+        failure, rather than the write being silently indistinguishable from
+        success.
+        """
 
     @abstractmethod
     def query(

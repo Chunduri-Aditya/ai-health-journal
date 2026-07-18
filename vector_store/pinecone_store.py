@@ -120,7 +120,7 @@ class PineconeStore(VectorStore):
         metadata: Optional[Dict[str, Any]] = None,
         *,
         namespace: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         ns = self._resolve_namespace(namespace)
         meta = dict(metadata or {})
         meta.setdefault("source_id", entry_id)
@@ -128,8 +128,10 @@ class PineconeStore(VectorStore):
         doc_text = text if self._store_text else ""
         try:
             self._vs_for(ns).add_texts([doc_text], metadatas=[meta], ids=[entry_id])
+            return True
         except Exception as e:
             logging.error(f"Pinecone add_entry failed: {e}")
+            return False
 
     def query(
         self,

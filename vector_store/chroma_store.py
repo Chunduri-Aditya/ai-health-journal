@@ -104,14 +104,16 @@ class ChromaStore(VectorStore):
         metadata: Optional[Dict[str, Any]] = None,
         *,
         namespace: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         try:
             coll = self._get_collection(namespace)
             meta = dict(metadata or {})
             meta.setdefault("namespace", self._resolve_namespace(namespace))
             coll.add(documents=[text], ids=[entry_id], metadatas=[meta])
+            return True
         except Exception as e:
             logging.error(f"Chroma add_entry failed: {e}")
+            return False
 
     def query(
         self,

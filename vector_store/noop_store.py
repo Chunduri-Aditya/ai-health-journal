@@ -28,8 +28,8 @@ class NoOpStore(VectorStore):
         metadata: Optional[Dict[str, Any]] = None,
         *,
         namespace: Optional[str] = None,
-    ) -> None:
-        return None
+    ) -> bool:
+        return True
 
     def query(
         self,

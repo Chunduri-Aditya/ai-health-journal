@@ -212,6 +212,21 @@
         el.appendChild(summary);
       }
 
+      // Crisis support takes priority over the reframe -- the gate clears
+      // reframe whenever crisis_support is set, so these are mutually
+      // exclusive, mirroring app._format_insight on the backend.
+      if (analysis.crisis_support && analysis.support_message) {
+        const support = document.createElement("p");
+        support.className = "crisis-support-box";
+        support.textContent = analysis.support_message;
+        el.appendChild(support);
+      } else if (analysis.reframe) {
+        const reframe = document.createElement("p");
+        reframe.className = "reframe-box";
+        reframe.textContent = analysis.reframe;
+        el.appendChild(reframe);
+      }
+
       // Emotions
       if (analysis.emotions && analysis.emotions.length) {
         el.appendChild(buildSection("Emotions", () => {
@@ -250,6 +265,11 @@
       // Coping suggestions
       if (analysis.coping_suggestions && analysis.coping_suggestions.length) {
         el.appendChild(buildSection("Suggestions", () => buildList(analysis.coping_suggestions, "suggestions-list")));
+      }
+
+      // Journaling tips
+      if (analysis.journaling_feedback && analysis.journaling_feedback.length) {
+        el.appendChild(buildSection("Journaling tips", () => buildList(analysis.journaling_feedback, "suggestions-list")));
       }
 
       // Footer: confidence + quotes
