@@ -622,7 +622,24 @@ def main():
         'Requires LLM_BACKEND=anthropic and ALLOW_CLOUD_LLM=true. '
         'Runs on eval corpus only — never on live user data.'
     ))
+    parser.add_argument('--mock_llm', action='store_true', help=(
+        'Run fully offline with a deterministic fake LLM (no Ollama). Patches '
+        'the /analyze route provider and the LLM-as-judge metric calls. Used by '
+        'make eval-smoke to exercise the pipeline without a model server.'
+    ))
     args = parser.parse_args()
+
+    # Offline smoke path: swap in the deterministic double for BOTH the route's
+    # generation (app._provider) and this module's judge-metric calls
+    # (json_generate). Kept here rather than in install_mock_llm() because this
+    # file runs as __main__, so a sys.modules lookup for it would miss.
+    if args.mock_llm:
+        from tests.support.fake_provider import ThemeAwareFakeProvider, fake_json_generate
+        import app as _app_mod
+        _app_mod._provider = ThemeAwareFakeProvider()
+        global json_generate
+        json_generate = fake_json_generate
+        print("Mock LLM installed: offline fake provider + fake judge (no Ollama).\n")
 
     # Handle deprecated flags
     if args.baseline_only:
