@@ -148,13 +148,6 @@ def _preferred_models_for_tier(machine_tier: str) -> Dict[str, str]:
     return {role: values[0] for role, values in candidates.items()}
 
 
-def _preferred_summary(preferred: Dict[str, str]) -> str:
-    return (
-        f"Recommended stack: generator {preferred['generator']}, "
-        f"verifier {preferred['verifier']}, prompt {preferred['prompt']}."
-    )
-
-
 def _pick_active_model(
     role: str,
     cfg_value: str,
@@ -194,36 +187,33 @@ def get_runtime_model_selection(cfg: Config) -> RuntimeModelSelection:
     verifier = _pick_active_model("verifier", cfg.verifier_model, "VERIFIER_MODEL", strategy, machine_tier, installed_names)
     prompt = _pick_active_model("prompt", cfg.prompt_model, "PROMPT_MODEL", strategy, machine_tier, installed_names)
 
-    missing_preferred = [
-        model_name
-        for model_name in preferred.values()
-        if installed_names and model_name not in installed_names
-    ]
+    missing_preferred = list(
+        dict.fromkeys(
+            model_name
+            for model_name in preferred.values()
+            if installed_names and model_name not in installed_names
+        )
+    )
 
     if strategy == "manual":
         source = "manual"
-        summary = "Manual model selection is active. Runtime models come from explicit configuration."
+        summary = "Manual model selection is active — runtime models come from explicit configuration."
     elif installed_names:
         all_preferred_installed = all(name in installed_names for name in preferred.values())
         if all_preferred_installed:
             source = "balanced-installed"
-            summary = (
-                f"Balanced preset matched this {machine_tier} machine and found the recommended models locally. "
-                f"Using {generator} for generation and {verifier} for verification. "
-                f"{_preferred_summary(preferred)}"
-            )
+            summary = f"Balanced preset matched this {machine_tier} machine — all recommended models are installed."
         else:
             source = "balanced-fallback"
             summary = (
-                f"Balanced preset targeted this {machine_tier} machine, but some preferred models are not installed. "
-                f"Using the best local fit: {generator} for generation, {verifier} for verification, and {prompt} for prompts. "
-                f"{_preferred_summary(preferred)}"
+                f"Balanced preset targeted this {machine_tier} machine, but some recommended models "
+                f"aren't installed, so it's using the best local fit."
             )
     else:
         source = "configured-defaults"
         summary = (
-            f"Balanced preset detected a {machine_tier} machine. {_preferred_summary(preferred)} "
-            f"Ollama model inventory was unavailable, so the app is falling back to configured defaults."
+            f"Balanced preset detected a {machine_tier} machine, but the Ollama model inventory was "
+            f"unavailable, so the app is using configured defaults."
         )
 
     return RuntimeModelSelection(
