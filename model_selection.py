@@ -84,7 +84,13 @@ def _normalized(name: str) -> str:
 
 def _is_candidate_chat_model(name: str) -> bool:
     normalized = _normalized(name)
-    blocked_tokens = ("embed", "embedding", "bge-", "nomic-embed", "all-minilm")
+    blocked_tokens = (
+        "embed", "embedding", "bge-", "nomic-embed", "all-minilm",
+        # Code-generation models are poor fits for emotionally-aware
+        # journaling and were previously selectable in the model dropdown
+        # alongside real candidates like phi3/qwen3.
+        "codellama", "coder", "starcoder", "codegemma",
+    )
     return not any(token in normalized for token in blocked_tokens)
 
 

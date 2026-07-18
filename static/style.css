@@ -176,16 +176,9 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
 .control-item { display: flex; align-items: center; gap: .5rem; font-size: .95rem; }
 .control-item label { font-weight: 500; color: var(--text-secondary); }
 
-.model-recommendation {
-  flex: 1 1 260px;
-  min-width: 260px;
-  font-size: .84rem;
-  line-height: 1.45;
+.model-summary {
+  font-size: .9rem;
   color: var(--text-secondary);
-  padding: .85rem 1rem;
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border-color);
-  background: var(--bg-secondary);
 }
 
 select {
@@ -220,8 +213,14 @@ input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-colo
   border-radius: var(--radius-md); box-shadow: var(--shadow-xl);
   animation: slideDown .25s ease-out;
 }
+
+/* The model-info control sits further right in the row than Quality Mode's,
+   so its tooltip needs to anchor from the right edge of its own trigger to
+   stay inside the container instead of overflowing off-screen. */
+#model-info { left: auto; right: 0; }
 .tooltip-content { padding: 1.1rem; color: var(--text-primary); }
 .tooltip-content strong { color: var(--accent-primary); display: block; margin-bottom: .6rem; font-size: 1rem; }
+.tooltip-content p { font-size: .875rem; line-height: 1.55; margin: 0 0 .75rem; color: var(--text-secondary); }
 .tooltip-content ul { list-style: none; padding: 0; margin: .5rem 0; }
 .tooltip-content li { margin-bottom: .75rem; padding-left: 1.25rem; position: relative;
                        line-height: 1.5; font-size: .875rem; }

@@ -30,7 +30,7 @@
         <div class="control-item" style="position: relative;">
           <input type="checkbox" id="quality-mode-toggle" checked>
           <label for="quality-mode-toggle">Quality Mode</label>
-          <button class="info-icon" title="What is Quality Mode?" onclick="toggleQualityInfo()" aria-expanded="false" aria-controls="quality-info">ℹ️</button>
+          <button id="quality-info-icon" class="info-icon" title="What is Quality Mode?" onclick="toggleQualityInfo()" aria-expanded="false" aria-controls="quality-info">ℹ️</button>
           <div id="quality-info" class="quality-info-tooltip" style="display: none;" role="tooltip">
             <div class="tooltip-content">
               <strong>Quality Mode</strong>
@@ -42,7 +42,17 @@
             </div>
           </div>
         </div>
-        <div id="model-recommendation" class="model-recommendation" aria-live="polite"></div>
+        <div class="control-item" style="position: relative;">
+          <span id="model-summary" class="model-summary" aria-live="polite"></span>
+          <button id="model-info-icon" class="info-icon" title="Model selection details" onclick="toggleModelInfo()" aria-expanded="false" aria-controls="model-info">ℹ️</button>
+          <div id="model-info" class="quality-info-tooltip" style="display: none;" role="tooltip">
+            <div class="tooltip-content">
+              <strong>Model selection</strong>
+              <p id="model-info-text"></p>
+              <button onclick="toggleModelInfo()" class="close-tooltip">Got it</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Stage progress indicator (quality mode only) -->
@@ -403,7 +413,8 @@
         const response = await fetch("/models");
         const data = await response.json();
         const selector = document.getElementById("model-selector");
-        const recommendationEl = document.getElementById("model-recommendation");
+        const summaryEl = document.getElementById("model-summary");
+        const infoTextEl = document.getElementById("model-info-text");
 
         const availableModels = Array.isArray(data.available_models) && data.available_models.length
           ? data.available_models
@@ -422,7 +433,11 @@
           }
         }
 
-        if (recommendationEl && data.summary) {
+        if (summaryEl && data.generator) {
+          summaryEl.textContent = `Using ${data.generator}`;
+        }
+
+        if (infoTextEl && data.summary) {
           const profile = data.system_profile || {};
           const memory = typeof profile.total_memory_gb === "number" && profile.total_memory_gb > 0
             ? `${profile.total_memory_gb} GB RAM`
@@ -431,7 +446,7 @@
           const missing = Array.isArray(data.missing_preferred) && data.missing_preferred.length
             ? ` Missing recommended models: ${data.missing_preferred.join(", ")}.`
             : "";
-          recommendationEl.textContent =
+          infoTextEl.textContent =
             `${data.summary} Machine profile: ${machineTier}, ${memory}. Prompt model: ${data.prompt}.` + missing;
         }
 
@@ -647,22 +662,35 @@
       toggle.textContent = shown ? "🔍 Show sources" : "🔍 Hide sources";
     }
 
-    // ─── Quality mode tooltip ─────────────────────────────────────────────────
-    function toggleQualityInfo() {
-      const info = document.getElementById("quality-info");
-      const btn  = document.querySelector(".info-icon");
-      const open = info.style.display === "none";
-      info.style.display = open ? "block" : "none";
-      btn.setAttribute("aria-expanded", open);
+    // ─── Info tooltips (Quality Mode, Model selection) ─────────────────────────
+    // Shared by id, not by the generic .info-icon class -- with two tooltips
+    // on the page, a class-based querySelector would always resolve to
+    // whichever one comes first in the DOM regardless of which was clicked.
+    const INFO_PANELS = [
+      { panelId: "quality-info", iconId: "quality-info-icon" },
+      { panelId: "model-info", iconId: "model-info-icon" },
+    ];
+
+    function toggleInfoPanel(panelId, iconId) {
+      const panel = document.getElementById(panelId);
+      const icon = document.getElementById(iconId);
+      const open = panel.style.display === "none";
+      panel.style.display = open ? "block" : "none";
+      icon.setAttribute("aria-expanded", open);
     }
 
+    function toggleQualityInfo() { toggleInfoPanel("quality-info", "quality-info-icon"); }
+    function toggleModelInfo() { toggleInfoPanel("model-info", "model-info-icon"); }
+
     document.addEventListener("click", (e) => {
-      const info = document.getElementById("quality-info");
-      const icon = document.querySelector(".info-icon");
-      if (info && !info.contains(e.target) && !icon.contains(e.target)) {
-        info.style.display = "none";
-        icon.setAttribute("aria-expanded", "false");
-      }
+      INFO_PANELS.forEach(({ panelId, iconId }) => {
+        const panel = document.getElementById(panelId);
+        const icon = document.getElementById(iconId);
+        if (panel && icon && panel.style.display !== "none" && !panel.contains(e.target) && !icon.contains(e.target)) {
+          panel.style.display = "none";
+          icon.setAttribute("aria-expanded", "false");
+        }
+      });
     });
 
     // ─── Keyboard shortcuts ───────────────────────────────────────────────────
