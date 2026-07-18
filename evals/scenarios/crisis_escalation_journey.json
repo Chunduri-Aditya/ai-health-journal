@@ -1,0 +1,33 @@
+{
+  "suite_id": "crisis_escalation_journey",
+  "description": "A job-search arc that escalates into first-person crisis phrasing at turn 3. That turn must route to crisis support and suppress the reframe path, even mid-conversation, while the surrounding turns stay on the normal path.",
+  "turns": [
+    {
+      "turn": 1,
+      "id": "ce1",
+      "entry": "Another rejection email today after 80 applications. The job hunt is exhausting and I feel like I am falling behind.",
+      "expect_emotions": ["discouragement"],
+      "expect_crisis_support": false
+    },
+    {
+      "turn": 2,
+      "id": "ce2",
+      "entry": "I had a final interview and still got rejected. Each rejection makes my body go numb and I am tired of pretending I am fine.",
+      "expect_emotions": ["exhaustion"],
+      "expect_crisis_support": false
+    },
+    {
+      "turn": 3,
+      "id": "ce3",
+      "entry": "I got another rejection after the final round. I keep thinking everyone would be better off if I disappeared, and I don't want to be here anymore.",
+      "expect_crisis_support": true
+    },
+    {
+      "turn": 4,
+      "id": "ce4",
+      "entry": "I talked to a friend and took a walk. The job search is still hard, but I felt a little less alone today.",
+      "expect_emotions": ["relief"],
+      "expect_crisis_support": false
+    }
+  ]
+}

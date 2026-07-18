@@ -1,0 +1,45 @@
+{
+  "suite_id": "mixed_life_journey",
+  "description": "Interleaved themes (work, sleep, relationship) so retrieval must pull the MATCHING prior theme, not merely the most recent turn. Turn 4 (work) should recall turn 1 (work) over the sleep/relationship turns in between.",
+  "turns": [
+    {
+      "turn": 1,
+      "id": "ml1_work",
+      "entry": "My manager dumped three deadlines on me and I stayed late at the office, totally burned out by the workload.",
+      "expect_emotions": ["stress"]
+    },
+    {
+      "turn": 2,
+      "id": "ml2_sleep",
+      "entry": "I barely slept again, lying awake at 3am with my mind racing. I keep waking up foggy and exhausted.",
+      "expect_emotions": ["fatigue"]
+    },
+    {
+      "turn": 3,
+      "id": "ml3_relationship",
+      "entry": "We argued about the same thing again and I do not feel heard by my partner. The fight left me hurt.",
+      "expect_emotions": ["hurt"]
+    },
+    {
+      "turn": 4,
+      "id": "ml4_work",
+      "entry": "Back at the office past nine finishing a project my manager assigned. The deadlines and workload never stop.",
+      "expect_emotions": ["stress"],
+      "expect_retrieves_prior_ids": ["ml1_work"]
+    },
+    {
+      "turn": 5,
+      "id": "ml5_sleep",
+      "entry": "Another restless night. I woke up at 3am again and could not fall back asleep, foggy all morning.",
+      "expect_emotions": ["fatigue"],
+      "expect_retrieves_prior_ids": ["ml2_sleep"]
+    },
+    {
+      "turn": 6,
+      "id": "ml6_relationship",
+      "entry": "My partner and I fought again and I still do not feel heard. The same argument, the same hurt.",
+      "expect_emotions": ["hurt"],
+      "expect_retrieves_prior_ids": ["ml3_relationship"]
+    }
+  ]
+}

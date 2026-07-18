@@ -1,0 +1,45 @@
+{
+  "suite_id": "work_stress_journey",
+  "description": "A recurring work-burnout arc across six turns. Later turns should surface the earlier work entries from memory, showing the conversation builds on its own history.",
+  "turns": [
+    {
+      "turn": 1,
+      "id": "ws1",
+      "entry": "My manager piled three new deadlines on me today and I stayed late at the office again. I am completely burned out.",
+      "expect_emotions": ["stress", "exhaustion"]
+    },
+    {
+      "turn": 2,
+      "id": "ws2",
+      "entry": "Another late night at work. The deadlines keep coming and my manager does not seem to notice how much I am carrying.",
+      "expect_emotions": ["overwhelm"]
+    },
+    {
+      "turn": 3,
+      "id": "ws3",
+      "entry": "I skipped lunch to hit a deadline and felt my chest tighten. This workload is not sustainable.",
+      "expect_emotions": ["stress"]
+    },
+    {
+      "turn": 4,
+      "id": "ws4",
+      "entry": "My manager added yet another project on top of the deadlines. I am exhausted and resentful about the workload.",
+      "expect_emotions": ["exhaustion", "frustration"],
+      "expect_retrieves_prior_ids": ["ws1", "ws2"]
+    },
+    {
+      "turn": 5,
+      "id": "ws5",
+      "entry": "Stayed at the office past nine again finishing a project. The burnout from all these work deadlines is catching up with me.",
+      "expect_emotions": ["exhaustion"],
+      "expect_retrieves_prior_ids": ["ws1", "ws2", "ws4"]
+    },
+    {
+      "turn": 6,
+      "id": "ws6",
+      "entry": "I told my manager the workload and deadlines are too much. Saying it out loud after weeks of late nights felt like a small relief.",
+      "expect_emotions": ["relief"],
+      "expect_retrieves_prior_ids": ["ws1", "ws4", "ws5"]
+    }
+  ]
+}
