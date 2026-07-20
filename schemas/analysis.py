@@ -49,6 +49,13 @@ class AnalysisOutput(BaseModel):
     crisis_support: bool = False
     support_message: str = ""
 
+    # Set deterministically by the distress gate (app._apply_reframe_gate), never
+    # by the model. The tier between ordinary sadness and crisis: hopelessness,
+    # worthlessness, harsh self-blame. Adds a steadying acknowledgement above the
+    # analysis. Mutually exclusive with crisis_support, which takes precedence.
+    distress_support: bool = False
+    steadying_message: str = ""
+
     grounding_evidence: List[str] = Field(default_factory=list)
     grounding_sources: List[GroundingSource] = Field(default_factory=list)
     grounding_mode: Optional[str] = None

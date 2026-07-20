@@ -304,7 +304,7 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
 }
 
 #insight-box:empty::before {
-  content: "Your analysis will appear here once you submit a prompt...";
+  content: "Whatever's on your mind, write it below. What comes back will appear here.";
   color: var(--text-secondary);
   opacity: .6;
   font-style: italic;
@@ -337,6 +337,19 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
 .crisis-support-box {
   background: var(--bg-tertiary);
   border-left: 4px solid #0ea5e9;
+  border-radius: var(--radius-sm);
+  padding: .9rem 1.1rem;
+  font-size: .95rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+/* Steadying acknowledgement on a distressing (not crisis) entry. Deliberately
+   the quietest box on the page: a soft teal rail, no icon, no alarm. It should
+   read as someone sitting down next to you, not as a system warning. */
+.steadying-box {
+  background: var(--bg-tertiary);
+  border-left: 4px solid #14b8a6;
   border-radius: var(--radius-sm);
   padding: .9rem 1.1rem;
   font-size: .95rem;

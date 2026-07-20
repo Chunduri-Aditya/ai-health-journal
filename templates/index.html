@@ -61,7 +61,7 @@
       <div class="textarea-wrapper">
         <textarea
           id="journal-entry"
-          placeholder="Write your thoughts here..."
+          placeholder="What's on your mind?"
           autofocus
           maxlength="1000"
           aria-label="Journal entry"
@@ -201,6 +201,16 @@
 
       const el = document.createElement("div");
       el.className = "analysis-cards";
+
+      // Steadying acknowledgement leads on a distressing entry, so the first
+      // thing read is not a clinical breakdown of a hard moment. Crisis entries
+      // never reach here -- the gate makes the two mutually exclusive.
+      if (analysis.distress_support && analysis.steadying_message) {
+        const steadying = document.createElement("p");
+        steadying.className = "steadying-box";
+        steadying.textContent = analysis.steadying_message;
+        el.appendChild(steadying);
+      }
 
       // Summary
       if (analysis.summary) {
@@ -342,8 +352,9 @@
 
     async function submitEntry() {
       const entry = entryBox.value.trim();
-      if (!entry) { showToast("Write something first.", "warn"); return; }
+      if (!entry) { showToast("Nothing written yet.", "warn"); return; }
 
+      let succeeded = false;
       setRunningState(true);
       copyInsightBtn.style.display = "none";
       insightBox.innerHTML = "";
@@ -380,25 +391,32 @@
           renderSources(data.analysis);
           storeMessage(entry, data.insight, data.analysis);
           copyInsightBtn.style.display = "inline-flex";
+          succeeded = true;
         } else {
-          insightBox.textContent = data.error || "Something went wrong.";
+          insightBox.textContent = data.error || "That didn't come through. Your entry is still here.";
           renderSources(null);
-          showToast(data.error || "Analysis failed.", "error");
+          showToast("That didn't come through.", "error");
         }
       } catch (err) {
         stopStageIndicator(false);
         if (err.name !== "AbortError") {
-          insightBox.textContent = "Request failed. Check that Ollama is running.";
-          showToast("Request failed.", "error");
+          insightBox.textContent =
+            "Couldn't reach the reflection service just now. Your entry is still here.";
+          showToast("Couldn't reach the service.", "error");
         } else {
           insightBox.textContent = "";
-          showToast("Analysis stopped.", "info");
+          showToast("Stopped. Your entry is still here.", "info");
         }
       }
 
-      entryBox.value = "";
-      charCounter.textContent = "0 / 1000";
-      charCounter.className = "char-counter";
+      // Only clear on success. Losing what someone just wrote because the model
+      // failed or they hit Stop is the worst possible moment to take their words
+      // away, and several error messages now promise the entry is still there.
+      if (succeeded) {
+        entryBox.value = "";
+        charCounter.textContent = "0 / 1000";
+        charCounter.className = "char-counter";
+      }
       setRunningState(false);
     }
 

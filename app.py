@@ -137,6 +137,75 @@ _HARM_TO_OTHERS_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Elevated distress that is NOT crisis: hopelessness, worthlessness, harsh
+# self-blame. This is the tier between ordinary sadness (handled by a normal
+# reframe) and self-harm (handled by _CRISIS_PATTERNS above). Firing here only
+# adds a steadying acknowledgement -- it never suppresses the analysis -- so the
+# cost of a false positive is one extra kind sentence, which is why this can
+# afford to be broader than the crisis floor.
+#
+# Deliberately first-person: "you're worthless" (quoting someone else) or "the
+# project is a failure" are not the user judging themselves. "i'm a burden" is
+# included even though it sits close to crisis phrasing -- it is a recognized
+# risk marker, and routing it to a supportive message is the safe direction.
+_DISTRESS_PATTERNS = re.compile(
+    r"\b("
+    r"i(?:'m| am)\s+(?:such\s+)?(?:a\s+)?(?:failure|worthless|useless|broken|pathetic|a\s+burden)|"
+    # "I feel like a failure" is at least as common as "I am a failure" and was
+    # missed by the copula-only form above.
+    r"i\s+feel\s+like\s+(?:such\s+)?(?:a\s+)?(?:failure|burden|nothing)|"
+    r"i\s+feel\s+(?:worthless|useless|broken|pathetic)|"
+    r"i\s+hate\s+myself|"
+    r"i(?:'m| am)\s+not\s+good\s+enough|"
+    r"i\s+can'?t\s+do\s+anything\s+right|"
+    r"i(?:'ll| will)\s+never\s+get\s+(?:better|past\s+this)|"
+    r"nothing\s+(?:i\s+do\s+)?matters|"
+    r"what'?s\s+the\s+point|"
+    r"no\s+one\s+(?:cares|would\s+notice)|"
+    r"i\s+(?:always|constantly)\s+(?:ruin|screw\s+up|mess\s+up)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Reported speech guard. "My friend said I am worthless" is the user describing
+# someone else's cruelty, not judging themselves, and answering it with "that
+# sounds hard about yourself" would misread the entry. Only third-party subjects
+# are listed: "I said I'm a failure" is still the user's own self-judgment and
+# must keep firing.
+_REPORTED_SPEECH = re.compile(
+    r"\b(?:he|she|they|someone|everyone|nobody|people|my\s+\w+|his|her|their)\s+"
+    r"(?:said|says|told\s+me|calls?\s+me|called\s+me|thinks?|thought)\b[^.!?]{0,25}$",
+    re.IGNORECASE,
+)
+
+# Language the ASSISTANT must never use back at the user. Blame, dismissal, and
+# clinical labelling are the three failure modes that turn a journaling reply
+# into something that lands badly on someone already struggling.
+#
+# Kept narrow on purpose: ordinary directive phrasing ("consider talking to your
+# manager", "you might try") is the product working correctly, so this matches
+# only blame/dismissal/diagnosis, never advice as such. The asymmetry runs the
+# other way from the crisis gate: a false positive here silently drops one
+# useful suggestion, so over-broad patterns would quietly gut the analysis.
+_HARSH_OUTPUT_PATTERNS = re.compile(
+    r"("
+    # Blame and command-shame
+    r"\byou\s+(?:should|need\s+to|have\s+to|must)\s+(?:just\s+)?(?:stop|quit|get\s+over)\b|"
+    r"\bjust\s+(?:get\s+over|move\s+on|snap\s+out)\b|"
+    r"\byou(?:'re| are)\s+(?:being\s+)?(?:irrational|dramatic|lazy|weak|childish|ridiculous|overreacting)\b|"
+    r"\byour\s+own\s+fault\b|\byou\s+brought\s+this\s+on\s+yourself\b|"
+    r"\bstop\s+(?:being|feeling|complaining|whining)\b|"
+    # Dismissal / minimisation
+    r"\bit'?s\s+not\s+(?:that\s+)?bad\b|"
+    r"\bothers\s+have\s+it\s+worse\b|\bcould\s+be\s+worse\b|"
+    r"\bstop\s+overthinking\b|"
+    # Clinical labelling of the person (diagnosis is out of scope for this app)
+    r"\byou\s+(?:have|suffer\s+from)\s+(?:depression|anxiety|a\s+disorder|bipolar|ptsd)\b|"
+    r"\byou(?:'re| are)\s+(?:clinically\s+)?(?:depressed|mentally\s+ill)\b"
+    r")",
+    re.IGNORECASE,
+)
+
 # Product-owner editable. Shown INSTEAD of a reframe when the crisis gate fires.
 # Acknowledges without diagnosing and points outward. Set AIHJ_CRISIS_MESSAGE to
 # localize the resource line for your region.
@@ -151,6 +220,16 @@ CRISIS_SUPPORT_MESSAGE = os.getenv("AIHJ_CRISIS_MESSAGE") or (
     "don't have to carry it alone. Please consider reaching out to a crisis line "
     "in your area or someone you trust. If you're in immediate danger, contact "
     "local emergency services."
+)
+
+# Shown ABOVE the analysis when the distress gate fires. Deliberately does NOT
+# point outward to services the way CRISIS_SUPPORT_MESSAGE does: this tier is
+# ordinary human difficulty, not an emergency, and medicalising it would be both
+# inaccurate and alienating. It acknowledges and steadies, nothing more.
+DISTRESS_STEADYING_MESSAGE = os.getenv("AIHJ_STEADYING_MESSAGE") or (
+    "That sounds genuinely hard, and it makes sense that it's sitting heavily "
+    "with you. Nothing below is a verdict on you. It's a reflection of what you "
+    "wrote, so take it at whatever pace feels right."
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -236,11 +315,11 @@ def analyze_entry():
     # of a clean 400 (Flask's bare default error page leaks internal detail
     # in debug mode, and is the wrong content-type for a JSON API either way).
     if not isinstance(data, dict):
-        return jsonify({"error": "✋ Please enter some thoughts before submitting."}), 400
+        return jsonify({"error": "There's nothing to look at yet. Write a little first."}), 400
 
     entry = data.get("entry", "")
     if not isinstance(entry, str):
-        return jsonify({"error": "✋ Please enter some thoughts before submitting."}), 400
+        return jsonify({"error": "There's nothing to look at yet. Write a little first."}), 400
     journal_entry     = entry.strip()
     selection = get_runtime_model_selection(cfg)
     model             = data.get("model", selection.generator)
@@ -249,11 +328,11 @@ def analyze_entry():
 
     # ── Input validation ──
     if not journal_entry:
-        return jsonify({"error": "✋ Please enter some thoughts before submitting."}), 400
+        return jsonify({"error": "There's nothing to look at yet. Write a little first."}), 400
     if len(journal_entry) > MAX_ENTRY_LENGTH:
-        return jsonify({"error": f"📏 Entry too long. Limit to {MAX_ENTRY_LENGTH} characters."}), 400
+        return jsonify({"error": f"That's a bit longer than this can take in at once. Try trimming to {MAX_ENTRY_LENGTH} characters."}), 400
     if not _provider.healthcheck():
-        return jsonify({"error": "🛑 The AI assistant is offline. Please try again later."}), 503
+        return jsonify({"error": "Your journal is here, but the reflection service isn't responding right now. Your writing is safe."}), 503
 
     # Retrieval is resolved once here so (a) the prompt context and the
     # `sources` returned to the client are the *same* hits, and (b) the
@@ -304,14 +383,14 @@ def analyze_entry():
             # it's implementation detail, not something a user needs, and
             # every other branch here already uses a generic message.
             logging.error(f"Pipeline JSON parse failure: {err}")
-            return jsonify({"error": "⚠️ Analysis failed. Please try again."}), 500
+            return jsonify({"error": "That didn't come through. Your entry is still here, so feel free to try again."}), 500
         logging.exception("ValueError in /analyze")
-        return jsonify({"error": "⚠️ Analysis failed. Please try again."}), 500
+        return jsonify({"error": "That didn't come through. Your entry is still here, so feel free to try again."}), 500
     except requests.exceptions.Timeout:
-        return jsonify({"error": "⏱️ The assistant took too long. Try again."}), 504
+        return jsonify({"error": "That took longer than expected and timed out. Your entry is still here."}), 504
     except Exception:
         logging.exception("Unexpected error in /analyze")
-        return jsonify({"error": "⚠️ Something unexpected happened. Please try again."}), 500
+        return jsonify({"error": "Something went wrong on our side, not yours. Your entry is still here."}), 500
 
 
 # ── Routes: prompt suggestion ─────────────────────────────────────────────────
@@ -330,7 +409,7 @@ def suggest_prompt():
         return jsonify({"prompt": output})
     except Exception:
         logging.exception("Prompt generation failed")
-        return jsonify({"error": "Failed to generate a prompt."}), 500
+        return jsonify({"error": "Couldn't fetch a prompt just now. You can always start with whatever is on your mind."}), 500
 
 
 # ── Routes: transcription ─────────────────────────────────────────────────────
@@ -372,7 +451,7 @@ def transcribe_audio():
         })
     except Exception:
         logging.exception("Transcription failed")
-        return jsonify({"error": "Transcription failed. Please try again."}), 500
+        return jsonify({"error": "Couldn't make out the recording. You can try again or type instead."}), 500
 
 
 # ── Crisis gate ───────────────────────────────────────────────────────────────
@@ -403,24 +482,99 @@ def _is_crisis(journal_entry: str, verdict: Dict[str, Any]) -> bool:
     return bool(_HARM_TO_OTHERS_PATTERNS.search(journal_entry or ""))
 
 
+def _is_distressed(journal_entry: str) -> bool:
+    """Elevated distress that is not crisis: hopelessness, worthlessness, self-blame.
+
+    Entry-text only, unlike _is_crisis: this tier exists to acknowledge how the
+    user is speaking about themselves, which is visible in the raw text and does
+    not need the verifier's judgment. Matches attributed to someone else are
+    skipped (see _REPORTED_SPEECH).
+    """
+    text = journal_entry or ""
+    for match in _DISTRESS_PATTERNS.finditer(text):
+        if _REPORTED_SPEECH.search(text[: match.start()]):
+            continue
+        return True
+    return False
+
+
 def _apply_reframe_gate(
     analysis_json: Dict[str, Any],
     journal_entry: str,
     verdict: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Suppress the positivity/reframe path on crisis entries; route to support.
+    """Route the entry to the right emotional register: crisis, distress, or normal.
 
     Deterministic by design: the model classifies (crisis_detected), code acts.
-    On a crisis the reframe is cleared and a non-diagnostic support message is
-    attached so the UI never answers self-harm with cheerfulness.
+    The three tiers are mutually exclusive and ordered by severity:
+
+      crisis   -> clear the reframe, attach a support message pointing outward.
+      distress -> keep the reframe (a gentle one is appropriate here) and add a
+                  steadying acknowledgement above the analysis.
+      normal   -> untouched.
+
+    Crisis wins over distress: a self-harm entry must never be answered with the
+    softer "that sounds hard" framing when it needs the support pathway.
     """
+    analysis_json.setdefault("crisis_support", False)
+    analysis_json.setdefault("support_message", "")
+    analysis_json.setdefault("distress_support", False)
+    analysis_json.setdefault("steadying_message", "")
+
     if _is_crisis(journal_entry, verdict):
         analysis_json["reframe"] = ""
         analysis_json["crisis_support"] = True
         analysis_json["support_message"] = CRISIS_SUPPORT_MESSAGE
-    else:
-        analysis_json.setdefault("crisis_support", False)
-        analysis_json.setdefault("support_message", "")
+    elif _is_distressed(journal_entry):
+        analysis_json["distress_support"] = True
+        analysis_json["steadying_message"] = DISTRESS_STEADYING_MESSAGE
+    return analysis_json
+
+
+# Fields the user actually reads. `quotes_from_user` is excluded on purpose: it
+# echoes the user's own words back, so harsh phrasing there is the user's, not
+# the assistant's, and stripping it would censor the person's own journal.
+_USER_FACING_TEXT_FIELDS = ("summary", "reframe", "support_message", "steadying_message")
+_USER_FACING_LIST_FIELDS = ("patterns", "coping_suggestions", "journaling_feedback", "triggers")
+
+
+def _find_harsh_content(analysis_json: Dict[str, Any]) -> List[str]:
+    """Return every assistant-authored snippet that reads as blaming, dismissive,
+    or clinically labelling. Empty list means the tone is acceptable."""
+    offenders: List[str] = []
+    for field in _USER_FACING_TEXT_FIELDS:
+        value = analysis_json.get(field)
+        if isinstance(value, str) and _HARSH_OUTPUT_PATTERNS.search(value):
+            offenders.append(f"{field}: {value}")
+    for field in _USER_FACING_LIST_FIELDS:
+        for item in analysis_json.get(field) or []:
+            if isinstance(item, str) and _HARSH_OUTPUT_PATTERNS.search(item):
+                offenders.append(f"{field}: {item}")
+    return offenders
+
+
+def _strip_harsh_items(analysis_json: Dict[str, Any]) -> Dict[str, Any]:
+    """Deterministic last line of defence on assistant tone.
+
+    Drops harsh items from the list fields outright, mirroring
+    _strip_ungrounded_quotes: whether a sentence blames or dismisses the user is
+    checkable in code, so it does not depend on a small local model reliably
+    policing its own output. Runs AFTER the revise step, so the collaborative
+    pipeline gets first attempt at rewriting the tone properly and this only
+    catches what survived.
+
+    `summary` is deliberately not stripped -- it is required and non-empty, so
+    removing it would break the schema. A harsh summary is instead forced
+    through the revise step by _run_quality_pipeline before reaching here.
+    """
+    for field in _USER_FACING_LIST_FIELDS:
+        items = analysis_json.get(field) or []
+        kept = [i for i in items if not (isinstance(i, str) and _HARSH_OUTPUT_PATTERNS.search(i))]
+        if len(kept) != len(items):
+            logging.warning(
+                f"Dropped {len(items) - len(kept)} harsh item(s) from '{field}' before display"
+            )
+            analysis_json[field] = kept
     return analysis_json
 
 
@@ -500,6 +654,24 @@ def _run_quality_pipeline(
             "rewrite_instructions": "",
         }
 
+    # Step 2b: Tone floor. A blaming or dismissive draft is forced back through
+    # the revise step even when the verifier judged it fine -- the verifier is a
+    # small local model and tone is exactly the thing it misses quietly. Merged
+    # into the verdict (rather than handled separately) so the revision prompt
+    # carries the real reason and the fallback model can fix it properly.
+    harsh = _find_harsh_content(draft_json)
+    if harsh:
+        logging.warning(f"Harsh tone detected in draft: {harsh}")
+        verdict["safety_flags"] = list(verdict.get("safety_flags", [])) + [
+            "harsh or dismissive tone toward the user"
+        ]
+        verdict["rewrite_required"] = True
+        verdict["rewrite_instructions"] = (
+            (verdict.get("rewrite_instructions") or "").strip()
+            + " Rewrite so nothing blames, dismisses, or diagnoses the user. "
+            "Acknowledge the difficulty plainly and keep suggestions gentle and optional."
+        ).strip()
+
     # Step 3: Revise if needed
     needs_rewrite = verdict.get("rewrite_required", False)
     groundedness  = verdict.get("groundedness_score", 1.0)
@@ -520,12 +692,14 @@ def _run_quality_pipeline(
             )
             logging.info("Revision completed.")
             final_json = _strip_ungrounded_quotes(final_json, journal_entry)
+            final_json = _strip_harsh_items(final_json)
             return _apply_reframe_gate(final_json, journal_entry, verdict)
         except Exception as e:
             logging.error(f"Revision failed: {type(e).__name__}. Using original draft.")
-            return _apply_reframe_gate(draft_json, journal_entry, verdict)
+            return _apply_reframe_gate(_strip_harsh_items(draft_json), journal_entry, verdict)
 
     logging.info("Draft passed verification.")
+    draft_json = _strip_harsh_items(draft_json)
     return _apply_reframe_gate(draft_json, journal_entry, verdict)
 
 
@@ -785,6 +959,10 @@ def _append_to_session(entry: str, response: str, analysis_json: Optional[Dict])
 def _format_insight(analysis_json: Dict[str, Any]) -> str:
     """Format structured JSON into readable plain text (for legacy / non-JS consumers)."""
     parts = []
+    # Steadying acknowledgement leads, so the first thing read on a hard entry is
+    # not a clinical breakdown of it.
+    if analysis_json.get("distress_support") and analysis_json.get("steadying_message"):
+        parts.append(analysis_json["steadying_message"])
     if "summary" in analysis_json:
         parts.append(analysis_json["summary"])
     if analysis_json.get("emotions"):
