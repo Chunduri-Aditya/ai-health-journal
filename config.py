@@ -51,7 +51,11 @@ def load_config() -> Config:
         prompt_model=g("PROMPT_MODEL", "samantha-mistral:7b"),
         model_selection_strategy=g("MODEL_SELECTION_STRATEGY", "balanced").lower(),
         model_machine_tier_override=g("MODEL_MACHINE_TIER_OVERRIDE", "auto").lower(),
-        quality_mode_default=g("QUALITY_MODE_DEFAULT", "false").lower() == "true",
+        # Models collaborate (draft -> verify -> refine) by default: the UI
+        # offers no model or mode choice, so this is the app's real behavior,
+        # not just a fallback. Set QUALITY_MODE_DEFAULT=false to run the faster
+        # single-pass path instead -- the only way to reach it now.
+        quality_mode_default=g("QUALITY_MODE_DEFAULT", "true").lower() == "true",
         retrieval_enabled=g("RETRIEVAL_ENABLED", "false").lower() == "true",
         retrieval_top_k=int(g("RETRIEVAL_TOP_K", "3")),
         groundedness_threshold=float(g("GROUNDEDNESS_THRESHOLD", "0.75")),

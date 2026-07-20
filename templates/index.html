@@ -10,48 +10,25 @@
   <!-- Toast container -->
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-  <button class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌃 Theme</button>
-  <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history" aria-label="Toggle history sidebar">📜 History</button>
-
   <div class="layout">
     <!-- Main Journal Area -->
     <div class="container">
+      <div class="card-topbar">
+        <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history" aria-label="Toggle history sidebar">📜 History</button>
+        <button class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌃 Theme</button>
+      </div>
       <h1>🧠 AI Health Journal</h1>
 
-      <!-- Model and Quality Controls -->
-      <div class="controls-group">
-        <div class="control-item">
-          <label for="model-selector">Model:</label>
-          <select id="model-selector">
-            <option value="phi3:3.8b">phi3:3.8b (Generator)</option>
-            <option value="samantha-mistral:7b">samantha-mistral:7b (Prompt)</option>
-          </select>
-        </div>
-        <div class="control-item" style="position: relative;">
-          <input type="checkbox" id="quality-mode-toggle" checked>
-          <label for="quality-mode-toggle">Quality Mode</label>
-          <button id="quality-info-icon" class="info-icon" title="What is Quality Mode?" onclick="toggleQualityInfo()" aria-expanded="false" aria-controls="quality-info">ℹ️</button>
-          <div id="quality-info" class="quality-info-tooltip" style="display: none;" role="tooltip">
-            <div class="tooltip-content">
-              <strong>Quality Mode</strong>
-              <ul>
-                <li><strong>✅ ON:</strong> Draft → Verify → Revise pipeline. Higher accuracy, slightly slower.</li>
-                <li><strong>⚡ OFF:</strong> Single-pass generation. Faster, less refined.</li>
-              </ul>
-              <button onclick="toggleQualityInfo()" class="close-tooltip">Got it</button>
-            </div>
-          </div>
-        </div>
-        <div class="control-item" style="position: relative;">
-          <span id="model-summary" class="model-summary" aria-live="polite"></span>
-          <button id="model-info-icon" class="info-icon" title="Model selection details" onclick="toggleModelInfo()" aria-expanded="false" aria-controls="model-info">ℹ️</button>
-          <div id="model-info" class="quality-info-tooltip" style="display: none;" role="tooltip">
-            <div class="tooltip-content">
-              <strong>Model selection</strong>
-              <p id="model-info-summary"></p>
-              <ul id="model-info-details"></ul>
-              <button onclick="toggleModelInfo()" class="close-tooltip">Got it</button>
-            </div>
+      <!-- Read-only status: models are chosen automatically, never picked by the user -->
+      <div class="model-status" style="position: relative;">
+        <span id="model-status-text">Draft → Verify → Refine</span>
+        <button id="model-info-icon" class="info-icon" title="Which models are working on this" onclick="toggleModelInfo()" aria-expanded="false" aria-controls="model-info">ℹ️</button>
+        <div id="model-info" class="info-tooltip" style="display: none;" role="tooltip">
+          <div class="tooltip-content">
+            <strong>Working on your entry</strong>
+            <p id="model-info-summary"></p>
+            <ul id="model-info-details"></ul>
+            <button onclick="toggleModelInfo()" class="close-tooltip">Got it</button>
           </div>
         </div>
       </div>
@@ -65,16 +42,22 @@
         <div class="stage" id="stage-revise">✨ Refining</div>
       </div>
 
-      <!-- Insight / analysis output -->
-      <div id="insight-box" role="region" aria-label="Analysis output" aria-live="polite"></div>
+      <!-- Insights display -->
+      <div class="insights-panel">
+        <div class="insights-panel-header">
+          <h2 class="insights-header">💡 Insights</h2>
+          <button id="copy-insight-btn" class="copy-insight-btn" onclick="copyInsightText()" title="Copy insight text" style="display:none;">📋 Copy</button>
+        </div>
+        <div id="insight-box" role="region" aria-label="Analysis output" aria-live="polite"></div>
 
-      <!-- Sources (RAG) -->
-      <div id="sources-container" style="display:none;">
-        <button id="sources-toggle" onclick="toggleSources()">🔍 Show sources</button>
-        <div id="sources-list"></div>
+        <!-- Sources (RAG) -->
+        <div id="sources-container" style="display:none;">
+          <button id="sources-toggle" onclick="toggleSources()">🔍 Show sources</button>
+          <div id="sources-list"></div>
+        </div>
       </div>
 
-      <!-- Journal entry textarea -->
+      <!-- Unified input command center -->
       <div class="textarea-wrapper">
         <textarea
           id="journal-entry"
@@ -83,26 +66,24 @@
           maxlength="1000"
           aria-label="Journal entry"
         ></textarea>
-        <div class="textarea-meta">
-          <span class="keyboard-hint">Enter to analyze &nbsp;·&nbsp; Shift+Enter for new line</span>
-          <span id="char-counter" class="char-counter">0 / 1000</span>
+        <div class="input-icons">
+          <button id="record-button" onclick="toggleRecording()" class="icon-pill" aria-label="Start voice recording" title="Record voice entry">🎙️</button>
+          <button onclick="getPrompt()" class="icon-pill" aria-label="Suggest a journaling prompt" title="Suggest a prompt">✨</button>
         </div>
       </div>
-
-      <!-- Voice recording -->
-      <div class="record-controls">
-        <button id="record-button" onclick="toggleRecording()" class="btn-success" aria-label="Start voice recording">
-          🎙️ Record
-        </button>
-        <span id="record-status" aria-live="polite"></span>
+      <span id="record-status" aria-live="polite"></span>
+      <div class="textarea-meta">
+        <span class="keyboard-hint">Enter to analyze &nbsp;·&nbsp; Shift+Enter for new line</span>
+        <span id="char-counter" class="char-counter">0 / 1000</span>
       </div>
 
       <!-- Action buttons -->
       <div class="button-group">
-        <button onclick="submitEntry()" class="btn-primary" id="analyze-btn">🦤 Analyze</button>
-        <button onclick="getPrompt()" class="btn-secondary">✨ Prompt</button>
-        <button onclick="abortResponse()" id="stop-button" class="btn-secondary" disabled aria-label="Stop current analysis">🛑 Stop</button>
-        <button onclick="newSession()" class="btn-danger">🧹 New Session</button>
+        <button onclick="newSession()" class="btn-ghost-neutral">＋ New Session</button>
+        <div class="run-controls">
+          <button onclick="submitEntry()" class="btn-primary" id="analyze-btn">🚀 Analyze</button>
+          <button onclick="abortResponse()" id="stop-button" class="btn-stop" style="display:none;" aria-label="Stop current analysis">🛑 Stop</button>
+        </div>
       </div>
     </div>
 
@@ -116,7 +97,7 @@
         <div id="history-detail-entry" class="history-detail-entry"></div>
         <div id="history-detail-insight" class="history-detail-insight"></div>
       </div>
-      <button onclick="newSession()" class="btn-danger" style="width: 100%; margin-top: 1rem;">🧹 New Session</button>
+      <button onclick="newSession()" class="btn-ghost-neutral" style="width: 100%; margin-top: 1rem;">＋ New Session</button>
     </div>
   </div>
 
@@ -128,6 +109,11 @@
     let audioChunks = [];
     let isRecording = false;
     let stageTimer = null;
+    // Models collaborate (draft -> verify -> refine) by default and the user is
+    // never asked to choose. An operator can still revert the whole app to the
+    // faster single-pass path with QUALITY_MODE_DEFAULT=false; loadModels()
+    // reads that back so the UI stays consistent with the backend.
+    let collaborativeMode = true;
 
     // ─── DOM refs ────────────────────────────────────────────────────────────
     const entryBox     = document.getElementById("journal-entry");
@@ -138,6 +124,7 @@
     const recordStatus = document.getElementById("record-status");
     const charCounter  = document.getElementById("char-counter");
     const analyzeBtn   = document.getElementById("analyze-btn");
+    const copyInsightBtn = document.getElementById("copy-insight-btn");
 
     // ─── Toast system ─────────────────────────────────────────────────────────
     function showToast(message, type = "info", duration = 3000) {
@@ -156,7 +143,7 @@
 
     // ─── Theme ───────────────────────────────────────────────────────────────
     function toggleTheme() {
-      document.body.classList.toggle("dark-mode");
+      document.body.classList.toggle("light-mode");
     }
 
     // ─── Sidebar ─────────────────────────────────────────────────────────────
@@ -345,18 +332,23 @@
     }
 
     // ─── Submit ───────────────────────────────────────────────────────────────
+    // Analyze and Stop occupy the same slot in .run-controls; only one is ever
+    // visible, so the primary CTA reads as "morphing" into Stop rather than a
+    // permanently-visible disabled button sitting beside it.
+    function setRunningState(isRunning) {
+      analyzeBtn.style.display = isRunning ? "none" : "";
+      stopBtn.style.display = isRunning ? "" : "none";
+    }
+
     async function submitEntry() {
       const entry = entryBox.value.trim();
       if (!entry) { showToast("Write something first.", "warn"); return; }
 
-      const model = document.getElementById("model-selector").value;
-      const qualityMode = document.getElementById("quality-mode-toggle").checked;
-
-      stopBtn.disabled = false;
-      analyzeBtn.disabled = true;
+      setRunningState(true);
+      copyInsightBtn.style.display = "none";
       insightBox.innerHTML = "";
 
-      if (qualityMode) {
+      if (collaborativeMode) {
         startStageIndicator();
       } else {
         insightBox.innerHTML = '<span class="thinking">Thinking...</span>';
@@ -364,10 +356,12 @@
 
       controller = new AbortController();
       try {
+        // No `model` is sent: the backend picks the generator for this machine
+        // (see model_selection.get_runtime_model_selection).
         const response = await fetch("/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ entry, model, quality_mode: qualityMode }),
+          body: JSON.stringify({ entry, quality_mode: collaborativeMode }),
           signal: controller.signal
         });
 
@@ -385,6 +379,7 @@
           }
           renderSources(data.analysis);
           storeMessage(entry, data.insight, data.analysis);
+          copyInsightBtn.style.display = "inline-flex";
         } else {
           insightBox.textContent = data.error || "Something went wrong.";
           renderSources(null);
@@ -404,8 +399,7 @@
       entryBox.value = "";
       charCounter.textContent = "0 / 1000";
       charCounter.className = "char-counter";
-      stopBtn.disabled = true;
-      analyzeBtn.disabled = false;
+      setRunningState(false);
     }
 
     // ─── Models ───────────────────────────────────────────────────────────────
@@ -413,31 +407,8 @@
       try {
         const response = await fetch("/models");
         const data = await response.json();
-        const selector = document.getElementById("model-selector");
-        const summaryEl = document.getElementById("model-summary");
         const infoSummaryEl = document.getElementById("model-info-summary");
         const infoDetailsEl = document.getElementById("model-info-details");
-
-        const availableModels = Array.isArray(data.available_models) && data.available_models.length
-          ? data.available_models
-          : [data.generator, data.prompt].filter(Boolean);
-
-        if (availableModels.length) {
-          selector.innerHTML = "";
-          availableModels.forEach((name) => {
-            const option = document.createElement("option");
-            option.value = name;
-            option.textContent = name === data.generator ? `${name} (Recommended)` : name;
-            selector.appendChild(option);
-          });
-          if (data.generator) {
-            selector.value = data.generator;
-          }
-        }
-
-        if (summaryEl && data.generator) {
-          summaryEl.textContent = `Using ${data.generator}`;
-        }
 
         if (infoSummaryEl && data.summary) {
           infoSummaryEl.textContent = data.summary;
@@ -469,7 +440,13 @@
         }
 
         if (data.quality_mode_default !== undefined) {
-          document.getElementById("quality-mode-toggle").checked = data.quality_mode_default;
+          collaborativeMode = !!data.quality_mode_default;
+        }
+        const statusEl = document.getElementById("model-status-text");
+        if (statusEl) {
+          statusEl.textContent = collaborativeMode
+            ? "Draft → Verify → Refine"
+            : "Single-pass analysis";
         }
       } catch {
         // Silently use defaults
@@ -482,14 +459,46 @@
     });
 
     // ─── Typewriter (legacy / plain text mode) ────────────────────────────────
+    // formatLegacyText escapes the raw LLM text FIRST, then applies markdown-lite
+    // substitutions on the escaped string -- the substitutions only ever insert
+    // tags the code itself writes, so model output can never inject live HTML.
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatLegacyText(text) {
+      let safe = escapeHtml(text);
+      safe = safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      safe = safe.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "<em>$1</em>");
+      safe = safe.replace(/^(?:-|•)\s+(.+)$/gm, "<li>$1</li>");
+      safe = safe.replace(/(?:<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+      return safe.replace(/\n/g, "<br>");
+    }
+
     function revealTextSlowly(text) {
       insightBox.textContent = "";
       const words = text.split(" ");
       let i = 0;
       const interval = setInterval(() => {
-        if (i >= words.length) return clearInterval(interval);
+        if (i >= words.length) {
+          clearInterval(interval);
+          insightBox.innerHTML = formatLegacyText(text);
+          return;
+        }
         insightBox.textContent += words[i++] + " ";
       }, 60);
+    }
+
+    // ─── Copy insight ─────────────────────────────────────────────────────────
+    function copyInsightText() {
+      const text = insightBox.innerText || insightBox.textContent || "";
+      if (!text.trim()) { showToast("Nothing to copy yet.", "warn"); return; }
+      navigator.clipboard.writeText(text).then(
+        () => showToast("Copied to clipboard.", "success"),
+        () => showToast("Copy failed.", "error")
+      );
     }
 
     // ─── History ──────────────────────────────────────────────────────────────
@@ -537,8 +546,7 @@
     // ─── Abort ────────────────────────────────────────────────────────────────
     function abortResponse() {
       if (controller) controller.abort();
-      stopBtn.disabled = true;
-      analyzeBtn.disabled = false;
+      setRunningState(false);
     }
 
     // ─── Prompt suggestion ────────────────────────────────────────────────────
@@ -589,6 +597,7 @@
       sessionHistory = [];
       historyList.innerHTML = "";
       insightBox.innerHTML = "";
+      copyInsightBtn.style.display = "none";
       closeHistoryDetail();
       showToast("New session started.", "success");
     }
@@ -597,7 +606,8 @@
     async function toggleRecording() {
       if (isRecording) {
         isRecording = false;
-        recordBtn.textContent = "🎙️ Record";
+        recordBtn.textContent = "🎙️";
+        recordBtn.setAttribute("aria-label", "Start voice recording");
         recordStatus.textContent = "";
         if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
         return;
@@ -620,7 +630,8 @@
         };
         mediaRecorder.start();
         isRecording = true;
-        recordBtn.textContent = "⏹️ Stop";
+        recordBtn.textContent = "⏹️";
+        recordBtn.setAttribute("aria-label", "Stop voice recording");
         recordStatus.textContent = "Recording… speak freely, then click Stop.";
       } catch (err) {
         showToast("Could not access microphone.", "error");
@@ -680,12 +691,10 @@
       toggle.textContent = shown ? "🔍 Show sources" : "🔍 Hide sources";
     }
 
-    // ─── Info tooltips (Quality Mode, Model selection) ─────────────────────────
-    // Shared by id, not by the generic .info-icon class -- with two tooltips
-    // on the page, a class-based querySelector would always resolve to
-    // whichever one comes first in the DOM regardless of which was clicked.
+    // ─── Info tooltips ────────────────────────────────────────────────────────
+    // Kept as a list (rather than a single pair) so the outside-click handler
+    // stays correct if another panel is added later.
     const INFO_PANELS = [
-      { panelId: "quality-info", iconId: "quality-info-icon" },
       { panelId: "model-info", iconId: "model-info-icon" },
     ];
 
@@ -697,7 +706,6 @@
       icon.setAttribute("aria-expanded", open);
     }
 
-    function toggleQualityInfo() { toggleInfoPanel("quality-info", "quality-info-icon"); }
     function toggleModelInfo() { toggleInfoPanel("model-info", "model-info-icon"); }
 
     document.addEventListener("click", (e) => {
