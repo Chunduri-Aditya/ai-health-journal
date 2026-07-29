@@ -27,6 +27,17 @@ class Config:
     rag_namespace_mode: str
     rag_namespace_fixed: str
     rag_user_id_header: str
+    # ── Local embedding backend ──────────────────────────────────────────────
+    # "default" = Chroma's bundled ONNX MiniLM (384-dim, no setup).
+    # "ollama"  = an embedding model on the local Ollama daemon (e.g.
+    #             nomic-embed-text, 768-dim), which measured better or equal in
+    #             every retrieval trap category (docs/IMPROVEMENTS.md §10).
+    # Switching backends against an existing store requires re-embedding; see
+    # scripts/migrate_embeddings.py. Distinct from EMBED_MODEL, which belongs to
+    # the separate Pinecone path in vector_store/pinecone_store.py.
+    embedding_backend: str
+    ollama_embed_model: str
+    ollama_embed_url: str
     history_personalization_enabled: bool
     # ── LLM backend (Upgrade 08) ─────────────────────────────────────────────
     # llm_backend: "ollama" (default, local) | "anthropic" (cloud, opt-in).
@@ -67,9 +78,31 @@ def load_config() -> Config:
         local_cache_max_items=int(g("LOCAL_CACHE_MAX_ITEMS", "2000")),
         local_cache_ttl_days=int(g("LOCAL_CACHE_TTL_DAYS", "30")),
         local_cache_path=g("LOCAL_TEXT_CACHE_PATH", "privacy/local_text_cache.jsonl"),
-        rag_namespace_mode=g("RAG_NAMESPACE_MODE", "session").lower(),
+        # Default changed from "session" to "fixed".
+        #
+        # "session" scoped retrieval to one browser session, and the session id
+        # lives in a cookie signed with a SECRET_KEY that regenerates on every
+        # boot when unset. Each restart therefore minted a fresh namespace. The
+        # measured result on a real store: 331 collections holding 280 entries,
+        # 229 of them alone in their own namespace and 90 empty. Since
+        # _retrieve_hits excludes the current entry by id, a lone entry retrieves
+        # from a pool of zero, so the core "RAG over your journal history"
+        # feature could never fire across sessions.
+        #
+        # "fixed" is the honest default for a local, single-user, privacy-first
+        # journal: history accumulates in one namespace and actually grounds
+        # future reflections.
+        #
+        # MULTI-USER DEPLOYMENTS MUST NOT USE THIS DEFAULT. Set
+        # RAG_NAMESPACE_MODE=user, and note that "user" mode currently trusts an
+        # unauthenticated request header (see tests/test_privacy_adversarial.py);
+        # it needs real authentication in front of it before anyone relies on it.
+        rag_namespace_mode=g("RAG_NAMESPACE_MODE", "fixed").lower(),
         rag_namespace_fixed=g("RAG_NAMESPACE_FIXED", "ai-health-journal"),
         rag_user_id_header=g("RAG_USER_ID_HEADER", "X-User-Id"),
+        embedding_backend=g("EMBEDDING_BACKEND", "default").lower(),
+        ollama_embed_model=g("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
+        ollama_embed_url=g("OLLAMA_EMBED_URL", "http://localhost:11434"),
         history_personalization_enabled=g("HISTORY_PERSONALIZATION_ENABLED", "false").lower() == "true",
         # Upgrade 08 — LLM backend gate
         llm_backend=g("LLM_BACKEND", "ollama").lower(),

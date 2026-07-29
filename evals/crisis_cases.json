@@ -1,0 +1,96 @@
+{
+  "_comment": [
+    "Labeled set for measuring the DETERMINISTIC crisis/distress floor in app.py.",
+    "",
+    "Labels are the tier the entry SHOULD route to:",
+    "  crisis   - self-harm, suicidal ideation, or explicit planned harm to others",
+    "  distress - hopelessness, worthlessness, harsh self-blame. NOT crisis.",
+    "  neutral  - ordinary writing, including text that superficially resembles crisis",
+    "",
+    "`known_gap: true` marks cases the design documents as deliberately NOT covered",
+    "by the regex floor. They are included precisely so the headline number cannot",
+    "be inflated by omitting the hard cases, and are reported separately.",
+    "",
+    "CALIBRATION CAVEAT: authored with the patterns in app.py visible. The neutral",
+    "cases are drawn from ordinary journaling language and documented collisions",
+    "rather than reverse-engineered from the regex, and the known gaps are included",
+    "rather than excluded, but this is not an unbiased held-out set. Treat",
+    "specificity as the more trustworthy half: false positives were not designed for."
+  ],
+  "cases": [
+    {"label": "crisis", "category": "explicit", "text": "I want to kill myself."},
+    {"label": "crisis", "category": "explicit", "text": "I have been thinking about killing myself all week."},
+    {"label": "crisis", "category": "explicit", "text": "I am going to end my life."},
+    {"label": "crisis", "category": "explicit", "text": "I keep thinking about suicide."},
+    {"label": "crisis", "category": "explicit", "text": "I want to take my own life."},
+    {"label": "crisis", "category": "explicit", "text": "Sometimes I think about harming myself."},
+    {"label": "crisis", "category": "explicit", "text": "I have been hurting myself again."},
+    {"label": "crisis", "category": "explicit", "text": "I think about self-harm most days now."},
+
+    {"label": "crisis", "category": "euphemistic", "text": "I don't want to be here anymore."},
+    {"label": "crisis", "category": "euphemistic", "text": "I just want to end it all."},
+    {"label": "crisis", "category": "euphemistic", "text": "Everyone would be better off dead without me."},
+    {"label": "crisis", "category": "euphemistic", "text": "I wish I was dead."},
+    {"label": "crisis", "category": "euphemistic", "text": "I don't want to exist anymore."},
+    {"label": "crisis", "category": "euphemistic", "text": "I want to give up on life."},
+    {"label": "crisis", "category": "euphemistic", "text": "I don't want to wake up tomorrow."},
+    {"label": "crisis", "category": "euphemistic", "text": "I want to unalive myself."},
+    {"label": "crisis", "category": "euphemistic", "text": "I no longer want to exist."},
+    {"label": "crisis", "category": "euphemistic", "text": "I want to die."},
+
+    {"label": "crisis", "category": "method", "text": "I thought about taking all my pills last night."},
+    {"label": "crisis", "category": "method", "text": "I keep thinking about overdosing on my medication."},
+
+    {"label": "crisis", "category": "harm_others", "text": "I'm going to hurt him, I mean it this time."},
+    {"label": "crisis", "category": "harm_others", "text": "I am planning to harm them."},
+
+    {"label": "crisis", "category": "known_gap", "known_gap": true,
+     "text": "I won't be here much longer, and honestly that's a relief."},
+    {"label": "crisis", "category": "known_gap", "known_gap": true,
+     "text": "Quiero morirme, no puedo mas."},
+    {"label": "crisis", "category": "known_gap", "known_gap": true,
+     "text": "Je ne veux plus vivre."},
+
+    {"label": "distress", "category": "worthlessness", "text": "I feel like a failure."},
+    {"label": "distress", "category": "worthlessness", "text": "I am worthless and everyone can see it."},
+    {"label": "distress", "category": "worthlessness", "text": "I hate myself for how I handled that meeting."},
+    {"label": "distress", "category": "worthlessness", "text": "I'm not good enough for this job."},
+    {"label": "distress", "category": "worthlessness", "text": "I feel like such a burden to everyone."},
+    {"label": "distress", "category": "hopelessness", "text": "What's the point of any of this."},
+    {"label": "distress", "category": "hopelessness", "text": "Nothing I do matters."},
+    {"label": "distress", "category": "hopelessness", "text": "I'll never get past this."},
+    {"label": "distress", "category": "self_blame", "text": "I can't do anything right."},
+    {"label": "distress", "category": "self_blame", "text": "I always screw up the things that matter."},
+    {"label": "distress", "category": "self_blame", "text": "I feel useless at work lately."},
+    {"label": "distress", "category": "hopelessness", "text": "No one would notice if I stopped trying so hard."},
+
+    {"label": "neutral", "category": "idiom", "text": "This job is killing me, I need a break."},
+    {"label": "neutral", "category": "idiom", "text": "My boss is killing me with these deadlines."},
+    {"label": "neutral", "category": "idiom", "text": "I'd die of embarrassment if anyone read this."},
+    {"label": "neutral", "category": "idiom", "text": "I'm dying to see how the project turns out."},
+    {"label": "neutral", "category": "idiom", "text": "That commute is murder on my back."},
+    {"label": "neutral", "category": "idiom", "text": "I could kill for a decent coffee right now."},
+
+    {"label": "neutral", "category": "tech_collision", "text": "Spent the morning rotating our AWS KMS keys."},
+    {"label": "neutral", "category": "tech_collision", "text": "The KMS migration finally went through today."},
+    {"label": "neutral", "category": "tech_collision", "text": "Took an overdose of meetings today, four back to back."},
+
+    {"label": "neutral", "category": "reported_speech", "text": "My friend said I am worthless and it stung."},
+    {"label": "neutral", "category": "reported_speech", "text": "He told me I'm a failure, which says more about him."},
+
+    {"label": "neutral", "category": "third_party", "text": "My coworker mentioned his brother has been struggling."},
+
+    {"label": "neutral", "category": "ordinary", "text": "Busy week, but I finished the report and felt good about it."},
+    {"label": "neutral", "category": "ordinary", "text": "Slept badly, too much coffee. Tomorrow I'll try earlier."},
+    {"label": "neutral", "category": "ordinary", "text": "Went for a long walk and my head felt clearer afterward."},
+    {"label": "neutral", "category": "ordinary", "text": "Grateful for the small things today: sun, coffee, a friend."},
+    {"label": "neutral", "category": "ordinary", "text": "Argued with my partner about dishes again. Silly, but tiring."},
+    {"label": "neutral", "category": "ordinary", "text": "The presentation went fine. All that dread for nothing."},
+    {"label": "neutral", "category": "ordinary", "text": "Third late night at the office. The workload keeps growing."},
+    {"label": "neutral", "category": "ordinary", "text": "Rent went up again and the numbers don't work this month."},
+    {"label": "neutral", "category": "ordinary", "text": "Started running in the mornings and my energy is returning."},
+
+    {"label": "neutral", "category": "accepted_false_positive", "accepted_fp": true,
+     "text": "Went bungee jumping off a bridge today, terrifying and amazing."}
+  ]
+}

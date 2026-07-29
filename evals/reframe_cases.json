@@ -1,0 +1,109 @@
+{
+  "_comment": [
+    "Labeled reframes for validating the reframe-quality rubric.",
+    "",
+    "The point of this file is NOT to score the app. It is to prove the rubric can",
+    "tell a good reframe from a bad one before the rubric is trusted to score",
+    "anything. A rubric that passes everything is worthless, and this repo has",
+    "already shipped two metrics that looked healthy while measuring nothing",
+    "(docs/IMPROVEMENTS.md sections 4 and 11).",
+    "",
+    "EVERY BAD REFRAME CARRIES EXACTLY ONE TRIGGER. The first version of this file",
+    "stacked two or three failure signals into each bad case, which made the whole",
+    "set untestable: disabling a detector changed no verdict, because the other",
+    "signals still fired. Caricatures do not test a rubric. Real model output emits",
+    "one subtle failure, not three stacked ones, so each case is now written that",
+    "way and the mutation test in docs/IMPROVEMENTS.md actually bites.",
+    "",
+    "failure_mode values: minimising, toxic_positivity, commanding, generic,",
+    "invalidating. Good reframes follow generator_prompts.py rule 30: grounded and",
+    "compassionate, opening a perspective WITHOUT dismissing the feeling."
+  ],
+  "cases": [
+    {
+      "entry": "Got passed over for the promotion again. I put in two years on that team and they gave it to someone who joined in March.",
+      "reframe": "Two years of effort on that team is real, and being passed over after that genuinely stings. It might also be worth noticing that this decision was made about one role at one moment, and it does not settle what your work has been worth.",
+      "label": "good"
+    },
+    {
+      "entry": "I snapped at my sister on the phone and now I feel awful about it. She was only trying to help.",
+      "reframe": "Feeling awful afterwards makes sense, and it says something that your first thought was about her intentions rather than your own defence. Snapping at someone once is a moment in a relationship, not a verdict on how you treat her.",
+      "label": "good"
+    },
+    {
+      "entry": "Third late night at the office this week. My manager keeps adding deadlines and I keep saying yes because I don't want to look difficult.",
+      "reframe": "Saying yes to protect how you are seen is a understandable thing to do, and three late nights is a real cost you are paying for it. It could be worth noticing that the fear of looking difficult and the actual reaction you would get may not be the same thing.",
+      "label": "good"
+    },
+    {
+      "entry": "I keep replaying the mistake I made in the meeting. Everyone must think I'm incompetent now.",
+      "reframe": "Replaying it that many times is exhausting, and the fact that it keeps returning says more about how much the work matters to you than about the mistake itself. What everyone thinks is also a guess right now rather than something you have been told.",
+      "label": "good"
+    },
+    {
+      "entry": "My closest friend cancelled on me for the third time and I'm starting to feel disposable.",
+      "reframe": "Three cancellations in a row landing as 'disposable' makes sense, because repetition is exactly what turns a scheduling problem into a message about your worth. Whether that is the message she intended is something you do not have evidence for yet.",
+      "label": "good"
+    },
+    {
+      "entry": "Got passed over for the promotion again. I put in two years on that team and they gave it to someone who joined in March.",
+      "reframe": "Two years on that team is a long stretch, though at least the experience stays with you wherever you go.",
+      "label": "bad",
+      "failure_mode": "minimising"
+    },
+    {
+      "entry": "I snapped at my sister on the phone and now I feel awful about it. She was only trying to help.",
+      "reframe": "You noticed straight away that she was only trying to help, and it could be worse as far as phone arguments go.",
+      "label": "bad",
+      "failure_mode": "minimising"
+    },
+    {
+      "entry": "My closest friend cancelled on me for the third time and I'm starting to feel disposable.",
+      "reframe": "Your closest friend cancelled three times and that is a lot to sit with, though there may be a silver lining here.",
+      "label": "bad",
+      "failure_mode": "toxic_positivity"
+    },
+    {
+      "entry": "I keep replaying the mistake I made in the meeting. Everyone must think I'm incompetent now.",
+      "reframe": "Replaying the meeting mistake that often is tiring, so cheer up and let it go.",
+      "label": "bad",
+      "failure_mode": "toxic_positivity"
+    },
+    {
+      "entry": "Third late night at the office this week. My manager keeps adding deadlines and I keep saying yes because I don't want to look difficult.",
+      "reframe": "Saying yes three times this week has cost you real evenings. You should tell your manager no tomorrow.",
+      "label": "bad",
+      "failure_mode": "commanding"
+    },
+    {
+      "entry": "Got passed over for the promotion again. I put in two years on that team and they gave it to someone who joined in March.",
+      "reframe": "That decision stings, and the practical move now is to get over it and focus on the next cycle.",
+      "label": "bad",
+      "failure_mode": "commanding"
+    },
+    {
+      "entry": "I snapped at my sister on the phone and now I feel awful about it. She was only trying to help.",
+      "reframe": "Every relationship has moments like this, and they tend to pass with time.",
+      "label": "bad",
+      "failure_mode": "generic"
+    },
+    {
+      "entry": "I keep replaying the mistake I made in the meeting. Everyone must think I'm incompetent now.",
+      "reframe": "Growth often follows discomfort, and this will look smaller in a month.",
+      "label": "bad",
+      "failure_mode": "generic"
+    },
+    {
+      "entry": "My closest friend cancelled on me for the third time and I'm starting to feel disposable.",
+      "reframe": "Your friend is probably just busy, so the cancelled plans likely mean nothing about you.",
+      "label": "bad",
+      "failure_mode": "invalidating"
+    },
+    {
+      "entry": "I snapped at my sister on the phone and now I feel awful about it. She was only trying to help.",
+      "reframe": "The good news is that one phone call will not change how your sister feels about you.",
+      "label": "bad",
+      "failure_mode": "invalidating"
+    }
+  ]
+}

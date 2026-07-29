@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from .base import RetrievalHit, VectorStore
+from .embeddings import EmbeddingBackendMismatch
 
 _CHROMA_AVAILABLE = False
 try:
@@ -45,12 +46,25 @@ class ChromaStore(VectorStore):
     and matches Pinecone's per-namespace mental model.
     """
 
-    def __init__(self, default_namespace: str = _DEFAULT_NAMESPACE) -> None:
+    def __init__(
+        self,
+        default_namespace: str = _DEFAULT_NAMESPACE,
+        *,
+        embedding_function: Optional[Any] = None,
+    ) -> None:
+        """
+        `embedding_function` selects how text is vectorised. None means Chroma's
+        bundled default (384-dim ONNX MiniLM), which is also what pre-existing
+        collections were written with. Passing a different one against a store
+        that already holds entries raises EmbeddingBackendMismatch rather than
+        writing incompatible vectors; run scripts/migrate_embeddings.py first.
+        """
         if not _CHROMA_AVAILABLE or chromadb is None:
             raise RuntimeError(
                 "Chroma backend selected but chromadb is not available.\n"
                 "Install optional dependencies: make setup-full"
             )
+        self._embedding_function = embedding_function
 
         # Default path aligns with upgrade 02's ./storage/ home.
         # CHROMA_PERSIST_DIR still honored for migrations.
@@ -83,10 +97,31 @@ class ChromaStore(VectorStore):
 
     def _get_collection(self, namespace: Optional[str]):
         ns = self._resolve_namespace(namespace)
-        return self._client.get_or_create_collection(
-            name=_collection_name(ns),
-            metadata={"description": f"journal_entries (ns={ns})"},
-        )
+        kwargs: Dict[str, Any] = {
+            "name": _collection_name(ns),
+            "metadata": {"description": f"journal_entries (ns={ns})"},
+        }
+        if self._embedding_function is not None:
+            kwargs["embedding_function"] = self._embedding_function
+        try:
+            return self._client.get_or_create_collection(**kwargs)
+        except ValueError as exc:
+            # Chroma refuses to attach a different embedding function to a
+            # collection that already recorded one. That refusal is the reason
+            # a backend switch cannot silently corrupt a store, so translate it
+            # into the one action that actually resolves it instead of letting
+            # a Chroma internal reach the caller.
+            if "embedding function" not in str(exc).lower():
+                raise
+            raise EmbeddingBackendMismatch(
+                f"Collection {_collection_name(ns)!r} was written with a different "
+                "embedding backend, so its vectors are not compatible with the "
+                "configured one.\n"
+                "Re-embed the existing entries first:\n"
+                "    python scripts/migrate_embeddings.py            # preview\n"
+                "    python scripts/migrate_embeddings.py --apply    # migrate\n"
+                "Or set EMBEDDING_BACKEND=default to keep the previous embedder."
+            ) from exc
 
     @staticmethod
     def _distance_to_score(distance: Any) -> float:
@@ -111,6 +146,13 @@ class ChromaStore(VectorStore):
             meta.setdefault("namespace", self._resolve_namespace(namespace))
             coll.add(documents=[text], ids=[entry_id], metadatas=[meta])
             return True
+        except EmbeddingBackendMismatch:
+            # Deliberately NOT swallowed into a False return. Every other write
+            # failure here is transient or local to one entry, but this one means
+            # the whole store is unreadable under the current config and needs an
+            # operator action. Returning False would present a fixable
+            # misconfiguration as routine data loss, entry after entry.
+            raise
         except Exception as e:
             logging.error(f"Chroma add_entry failed: {e}")
             return False
@@ -136,6 +178,8 @@ class ChromaStore(VectorStore):
             if filter_metadata:
                 kwargs["where"] = dict(filter_metadata)
             results = coll.query(**kwargs)
+        except EmbeddingBackendMismatch:
+            raise  # see add_entry: a config error, not an empty result set
         except Exception as e:
             logging.error(f"Chroma query failed: {e}")
             return []

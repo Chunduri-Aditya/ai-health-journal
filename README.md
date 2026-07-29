@@ -6,9 +6,132 @@
 
 A local-only journaling assistant that analyzes your entries using local LLMs (Ollama). Runs fully on localhost by default—no external APIs, no cloud storage. Optional cloud vector store (Pinecone) is gated and off by default. Includes a reproducible DPO fine-tuning pipeline for improving model groundedness.
 
-**Quick links:** [Quickstart](#quickstart) | [Evaluation Pipeline](#dpo-dataset-builder-baseline-vs-quality--reproducible-eval--pairing--training) | [Architecture](#architecture) | [Common Issues](#common-issues) | [Privacy & Security](#privacy--security)
+**Quick links:** [Measured results](#measured-results) | [Quickstart](#quickstart) | [Clinical design](docs/CLINICAL_DESIGN.md) | [Architecture](#architecture) | [Common Issues](#common-issues) | [Privacy & Security](#privacy--security)
 
-**Planning docs:** [Project Overview](docs/PROJECT_OVERVIEW.md) | [Upgrade Roadmap](docs/upgrades/README.md)
+**Design docs:** [Clinical Design](docs/CLINICAL_DESIGN.md) · [Improvements Log](docs/IMPROVEMENTS.md) · [Privacy](PRIVACY.md) · [Upgrade Roadmap](docs/upgrades/README.md)
+
+---
+
+## Measured results
+
+Two things in this repo are claims that can be checked rather than asserted:
+whether retrieval surfaces the right past entries, and whether the safety floor
+catches a crisis. Both are measured, both are reproducible offline, and the
+numbers below come from commands you can run.
+
+### Retrieval quality
+
+An ablation over dense, BM25, hybrid RRF, and alternative embedders on a
+diagnostic corpus where every query is tagged with the confusion it is built to
+induce (lexical trap, valence flip, temporal, semantic neighbour).
+
+| strategy | P@1 | Recall@3 | MRR |
+|---|---|---|---|
+| dense, ONNX MiniLM (was the default) | 0.792 | 0.875 | 0.854 |
+| BM25 only | 0.583 | 0.583 | 0.618 |
+| hybrid RRF | 0.625 | 0.646 | 0.681 |
+| **dense, nomic-embed-text (current)** | **0.833** | **0.979** | **0.917** |
+
+```bash
+make rag-eval          # regression gate on the incumbent
+PYTHONPATH=. python evals/rag_ablation.py --cases evals/rag_retrieval_cases_v2.json
+```
+
+The per-category breakdown is the point. Aggregate recall of 0.875 looked healthy
+while one category failed outright:
+
+| | lexical_trap | semantic_neighbor | **valence_flip** | temporal | same_topic_facet | clean |
+|---|---|---|---|---|---|---|
+| MiniLM | 1.000 | 0.900 | **0.667** | 1.000 | 1.000 | 0.875 |
+| nomic | 1.000 | 1.000 | **1.000** | 1.000 | 1.000 | 0.875 |
+
+`valence_flip` measures whether "a good day at work" retrieves good days or bad
+ones. MiniLM encodes topic and not emotional valence, so a positive entry
+retrieved the user's *worst* entries. In a journaling assistant the retrieved
+entries become the grounding context for what the person reads back, so on a good
+day the system was grounding its reflection in their hardest writing. Switching
+embedder fixed it outright, and it also runs about twice as fast (median 26.6 ms
+vs 58.0 ms per embedding).
+
+Two challengers were built, measured, and **rejected**: a score threshold (the
+relevant and irrelevant score distributions overlap completely, so no cutoff
+separates them) and a valence-aware reranker (it helped the weak embedder and
+actively hurt the strong one). Both are kept in
+[`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) rather than deleted, because a
+proposal that failed measurement is what stops it being re-proposed.
+
+### Safety floor
+
+The app routes entries into three tiers: crisis, distress, and normal. Crisis
+clears the reframe and points outward to human support; distress adds a steadying
+acknowledgement without medicalising it; normal is untouched. The reasoning, and
+which established constructs each behaviour corresponds to, is in
+[`docs/CLINICAL_DESIGN.md`](docs/CLINICAL_DESIGN.md).
+
+Sensitivity and specificity for the **deterministic floor only**, called with an
+empty verifier verdict, so no LLM is involved and the result is exactly
+reproducible. That floor is the guarantee that survives a failed verifier call or
+an offline machine.
+
+| tier | sensitivity | specificity | PPV | NPV | confusion |
+|---|---|---|---|---|---|
+| crisis | **1.000** | 0.971 | 0.957 | 1.000 | TP=22 **FN=0** FP=1 TN=33 |
+| distress | 1.000 | 1.000 | — | — | TP=12 FN=0 FP=0 TN=22 |
+
+```bash
+make crisis-eval
+```
+
+Crisis entries handled as distress: 0. The single false positive is a documented,
+deliberately accepted one. Sensitivity is gated at 1.0 rather than something
+softer, because the floor exists to fail closed: a regression that starts missing
+covered phrasing breaks the build. Specificity is gated lower, because the two
+errors are not equally bad. A false positive shows one unnecessary supportive
+message; a false negative lets a reframe reach someone in real danger.
+
+The eval was verified by breaking the thing it measures rather than trusted on a
+green run. Deleting one euphemistic branch from the crisis patterns drops
+sensitivity to 0.909, names both missed entries, and exits non-zero.
+
+### Reframe quality
+
+A five-detector rubric (minimising, toxic positivity, commanding language,
+ungrounded genericness, invalidating pivots) validated against labeled good and
+bad reframes before being trusted, then run against real model output.
+
+```bash
+make reframe-eval                              # validate the rubric (no LLM)
+python evals/reframe_quality_eval.py --live    # score the live pipeline (needs Ollama)
+```
+
+Every detector was proven load-bearing by mutation testing rather than assumed:
+disabling each one independently drops recall from 1.000 to 0.800, missing
+exactly its own two labeled cases and no others.
+
+Scored against real `qwen3:8b` output, the rubric's first pass flagged one
+reframe as ungrounded: *"It's natural to feel hurt when someone we care about
+lets us down, but this doesn't define your worth."* Read plainly, that reframe
+acknowledges the feeling before pivoting; the rubric's acknowledgement lexicon
+simply didn't recognise "natural to feel X" as one of the phrases this model
+uses for it. Fixed by adding the category, not by matching that one sentence,
+then re-validated against the labeled set before trusting the live score again:
+5/5 acceptable on the second run. Full account in
+[`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) section 12, including a first
+mutation test that was itself a no-op and was caught before being trusted.
+
+### What these numbers do not say
+
+- **All three case sets were authored with the implementation visible**, so
+  sensitivity and recall are optimistic. Specificity is the more trustworthy half.
+  An unbiased estimate needs held-out sets written by someone else.
+- The retrieval corpus is 31 documents and 24 queries. The reframe rubric was
+  validated against 15 exemplars and live-scored against 5 real entries. Small,
+  all three.
+- Three crisis phrasings are documented as deliberately out of scope and are
+  excluded from the scores, then reported separately on every run.
+- **The reframe rubric only catches what is mechanically checkable.** It cannot
+  judge insight, timing, or whether a reframe is true, only whether it minimises,
+  commands, or dismisses.
 
 ---
 
@@ -20,7 +143,7 @@ embedded on-device and retrieved to ground new reflections. Everything below the
 
 **Core (the RAG journal):**
 
-- **Local RAG over past entries**: entries embedded on-device (Chroma, ONNX MiniLM) and retrieved to ground new reflections. Cloud vector store (Pinecone) is gated off by default. Trust boundary and data flow: [PRIVACY.md](PRIVACY.md)
+- **Local RAG over past entries**: entries embedded on-device (Chroma + `nomic-embed-text` via Ollama) and retrieved to ground new reflections. Cloud vector store (Pinecone) is gated off by default. Trust boundary and data flow: [PRIVACY.md](PRIVACY.md)
 - **Privacy-first by default**: runs fully on localhost (Flask + Ollama). No entry text, embedding, or insight leaves the machine unless you open a cloud gate. `PRIVACY_MODE=strict` scrubs PII (emails, phones) before an entry is stored
 - **AI-powered insights**: analyze journal entries with local LLMs (Phi-3, Mistral) via Ollama
 - **Multi-model quality pipeline**: Draft → Verify → Revise workflow reduces hallucinations
@@ -52,6 +175,12 @@ embedded on-device and retrieved to ground new reflections. Everything below the
   # Optional higher-quality verifier on larger machines
   ollama pull deepseek-r1:8b
   ```
+- **Embedding model (required for retrieval):**
+  ```bash
+  ollama pull nomic-embed-text
+  ```
+  Set `EMBEDDING_BACKEND=default` to fall back to Chroma's bundled MiniLM instead,
+  at the retrieval quality shown in [Measured results](#measured-results).
 - The app will inspect the machine and installed Ollama models, then choose a balanced runtime stack automatically unless you set explicit model env vars.
 - Local RAG (Chroma) is included in the **core** install — no extra step
 - Optional: [Pinecone](https://www.pinecone.io/) for cloud RAG (requires API key, installed via requirements-optional.txt)
@@ -135,6 +264,21 @@ QUALITY_MODE_DEFAULT=false
 RETRIEVAL_ENABLED=true
 GROUNDEDNESS_THRESHOLD=0.75
 
+# Embedding backend for local retrieval
+# ollama  = nomic-embed-text via the local Ollama daemon (768-dim, current default)
+# default = Chroma's bundled ONNX MiniLM (384-dim, no extra pull)
+# Changing this against an existing store requires re-embedding:
+#   python scripts/migrate_embeddings.py            # preview
+#   python scripts/migrate_embeddings.py --apply    # migrate
+EMBEDDING_BACKEND=ollama
+OLLAMA_EMBED_MODEL=nomic-embed-text
+
+# Retrieval namespace. "fixed" (default) accumulates history in one namespace so
+# past entries can actually ground new ones. "session" isolates per browser
+# session, which means a fresh session retrieves nothing. Multi-user deployments
+# must use "user" AND put real authentication in front of it.
+RAG_NAMESPACE_MODE=fixed
+
 # Vector Store Backend (none/chroma/pinecone)
 VECTOR_BACKEND=chroma
 ALLOW_CLOUD_VECTORSTORE=false  # Set to true to enable Pinecone
@@ -208,7 +352,9 @@ The project includes a `Makefile` with convenient commands:
 make setup          # Create venv and install core dependencies
 make setup-full     # Create venv and install all dependencies (core + optional)
 make run            # Run the Flask application
-make verify         # Compile and verify code
+make verify         # Compile, run tests, and run the crisis safety eval
+make crisis-eval    # Crisis floor sensitivity/specificity (no LLM, offline)
+make rag-eval       # Retrieval regression gate (P@1 / MRR floors)
 make eval-smoke     # Run smoke tests with mock LLM
 make eval-smoke-retrieval  # Run smoke tests with RAG enabled
 make report         # Generate evaluation report
@@ -268,7 +414,6 @@ A successful re-evaluation should show:
 - `evals/summarize_results.py` - Summarizes evaluation results
 
 ### Additional Modules
-- `chains/insight_chain.py` - LangChain integration for insights
 - `schemas/analysis.py` - Data schemas for analysis
 - `privacy/` - Privacy features
   - `local_text_cache.py` - Local text caching
@@ -639,7 +784,6 @@ You want a minimal, clean folder that:
 - `version.py`
 - `vector_store/` (unified retrieval surface — Chroma / Pinecone / noop)
 - `schemas/` (data schemas)
-- `chains/` (LangChain integrations)
 - `behavior/` (behavior patterns and rules)
 - `privacy/` (privacy features)
 - `scripts/` (utility scripts)
@@ -949,8 +1093,6 @@ ai-health-journal/
 ├── generator_prompts.py   # Draft generation prompts
 ├── verifier_prompts.py    # Verification prompts
 ├── version.py             # Version information
-├── chains/                # LangChain integrations
-│   └── insight_chain.py   # LangChain insight chain
 ├── schemas/               # Data schemas
 │   └── analysis.py        # Analysis schema definitions
 ├── privacy/               # Privacy features

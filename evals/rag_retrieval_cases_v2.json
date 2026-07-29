@@ -1,0 +1,100 @@
+{
+  "_comment": [
+    "Diagnostic retrieval case set. v1 (rag_retrieval_cases.json) is kept intact",
+    "as the comparison baseline; this file does not replace it.",
+    "",
+    "Every query carries a `trap` category so failures are diagnosable rather than",
+    "just countable. The categories name the specific confusion each query is",
+    "built to induce:",
+    "  lexical_trap     - shares surface tokens with an unrelated cluster",
+    "  valence_flip     - same topic, opposite emotional valence",
+    "  temporal         - same situation before vs after resolution",
+    "  same_topic_facet - same life domain, different facet (workload vs colleague)",
+    "  semantic_neighbor- adjacent feeling from a different cause (sleep vs exercise fatigue)",
+    "  clean            - control, no deliberate confusable",
+    "",
+    "k=3 matches the app's production RETRIEVAL_TOP_K so these numbers describe",
+    "what users actually get.",
+    "",
+    "Caveat on P@k: relevant-set cardinality varies (1 or 2) across queries, so",
+    "P@3 is capped below 1.0 for single-relevant queries and is NOT comparable",
+    "across them. Read Recall@k and MRR as the headline metrics."
+  ],
+  "k": 3,
+  "documents": [
+    {"id": "work_load1", "text": "My manager piled three deadlines on me and I stayed late again, totally burned out."},
+    {"id": "work_load2", "text": "Another twelve hour day at the office. The workload keeps growing and I cannot keep up."},
+    {"id": "work_conflict1", "text": "My colleague took credit for my work in the meeting and I said nothing."},
+    {"id": "work_conflict2", "text": "Tense standup again. My teammate keeps talking over me and I feel invisible at work."},
+    {"id": "work_good1", "text": "Shipped the feature today and my manager actually thanked me in front of the team."},
+
+    {"id": "jobhunt1", "text": "Sent out ten applications today and got another rejection email. The job hunt is exhausting."},
+    {"id": "jobhunt2", "text": "Third rejection this week. I keep wondering if I will ever get hired anywhere."},
+    {"id": "jobhunt_good1", "text": "Got a callback for a second interview. First bit of hope in the job search in weeks."},
+
+    {"id": "sleep_bad1", "text": "I have barely slept in days, lying awake at 3am with my mind racing."},
+    {"id": "sleep_bad2", "text": "Another restless night. I keep waking up exhausted and foggy in the morning."},
+    {"id": "sleep_good1", "text": "Slept eight hours straight for the first time in a month and woke up clear headed."},
+
+    {"id": "exercise1", "text": "Started a morning run habit and my energy is slowly coming back."},
+    {"id": "exercise2", "text": "Skipped the gym all week and my body feels sluggish and tense."},
+    {"id": "exercise3", "text": "Legs are dead after that long run today. Good tired, not bad tired."},
+
+    {"id": "rel_bad1", "text": "We argued again about the same thing and I do not feel heard by my partner."},
+    {"id": "rel_bad2", "text": "Another fight over nothing. I said things I regret and now we are not speaking."},
+    {"id": "rel_good1", "text": "Date night helped. We finally talked things through and I felt close to them again."},
+
+    {"id": "friend1", "text": "My closest friend cancelled on me for the third time and I am starting to feel disposable."},
+    {"id": "friend2", "text": "Long call with an old friend. Felt seen in a way I have not in months."},
+
+    {"id": "family1", "text": "Called my mother and the conversation turned into a lecture again. I hung up drained."},
+    {"id": "family2", "text": "My brother remembered the anniversary without being reminded. Small thing, meant a lot."},
+
+    {"id": "grat1", "text": "Grateful for the small things today: good coffee, a bit of sun, a walk with a friend."},
+    {"id": "grat2", "text": "I wrote down three good things that happened this week and felt lighter afterward."},
+
+    {"id": "money1", "text": "Rent went up again and the numbers just do not work this month. Constant low level dread."},
+    {"id": "money2", "text": "Paid off the last of the credit card. First time in two years the balance is zero."},
+
+    {"id": "selfcrit1", "text": "I feel like a failure. Everyone else seems to have figured it out and I have not."},
+    {"id": "selfcrit2", "text": "I keep replaying that mistake from the meeting. I cannot do anything right."},
+
+    {"id": "health_anx1", "text": "The test results come back Thursday and I have been catastrophizing all week."},
+
+    {"id": "present_before1", "text": "Presentation tomorrow and my stomach is in knots. I am sure I will freeze up."},
+    {"id": "present_after1", "text": "The presentation actually went fine. All that dread for nothing."},
+
+    {"id": "move1", "text": "Packing up the apartment. Excited about the new city but grieving this one."}
+  ],
+  "queries": [
+    {"trap": "lexical_trap", "query": "the pressure and workload at my job is too much", "relevant_ids": ["work_load1", "work_load2"]},
+    {"trap": "lexical_trap", "query": "looking for work and dealing with rejection", "relevant_ids": ["jobhunt1", "jobhunt2"]},
+    {"trap": "lexical_trap", "query": "a fight that I regret afterwards", "relevant_ids": ["rel_bad2"]},
+
+    {"trap": "semantic_neighbor", "query": "I cannot sleep and I am exhausted", "relevant_ids": ["sleep_bad1", "sleep_bad2"]},
+    {"trap": "semantic_neighbor", "query": "my body feels tired after physical activity", "relevant_ids": ["exercise2", "exercise3"]},
+    {"trap": "semantic_neighbor", "query": "feeling let down by a friend", "relevant_ids": ["friend1"]},
+    {"trap": "semantic_neighbor", "query": "worried about my health and waiting on test results", "relevant_ids": ["health_anx1"]},
+    {"trap": "semantic_neighbor", "query": "feeling invisible and unappreciated by people around me", "relevant_ids": ["work_conflict2", "friend1"]},
+
+    {"trap": "valence_flip", "query": "a night where I actually slept well", "relevant_ids": ["sleep_good1"]},
+    {"trap": "valence_flip", "query": "a good day at work where I felt appreciated", "relevant_ids": ["work_good1"]},
+    {"trap": "valence_flip", "query": "finally getting on top of my finances", "relevant_ids": ["money2"]},
+    {"trap": "valence_flip", "query": "reconnecting with my partner after tension", "relevant_ids": ["rel_good1"]},
+    {"trap": "valence_flip", "query": "a friendship that felt nourishing", "relevant_ids": ["friend2"]},
+    {"trap": "valence_flip", "query": "a family moment that felt good", "relevant_ids": ["family2"]},
+
+    {"trap": "temporal", "query": "anxious the day before a big presentation", "relevant_ids": ["present_before1"]},
+    {"trap": "temporal", "query": "relief after something I dreaded turned out fine", "relevant_ids": ["present_after1"]},
+
+    {"trap": "same_topic_facet", "query": "conflict with a coworker", "relevant_ids": ["work_conflict1", "work_conflict2"]},
+    {"trap": "same_topic_facet", "query": "arguing with my partner", "relevant_ids": ["rel_bad1", "rel_bad2"]},
+    {"trap": "same_topic_facet", "query": "a difficult conversation with a family member", "relevant_ids": ["family1"]},
+    {"trap": "same_topic_facet", "query": "hope in the job search", "relevant_ids": ["jobhunt_good1"]},
+
+    {"trap": "clean", "query": "feeling thankful for small everyday things", "relevant_ids": ["grat1", "grat2"]},
+    {"trap": "clean", "query": "worrying about money and bills", "relevant_ids": ["money1"]},
+    {"trap": "clean", "query": "harsh self judgment and feeling not good enough", "relevant_ids": ["selfcrit1", "selfcrit2"]},
+    {"trap": "clean", "query": "mixed feelings about a big life change", "relevant_ids": ["move1"]}
+  ]
+}

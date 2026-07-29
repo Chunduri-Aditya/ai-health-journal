@@ -47,8 +47,13 @@ def get_vector_store(
             logging.error(f"Chroma selected but unavailable; using noop. {e}")
             return NoOpStore()
         try:
+            from .embeddings import build_embedding_function
+
             logging.info(f"Using Chroma vector backend (default namespace={ns}).")
-            return ChromaStore(default_namespace=ns)
+            return ChromaStore(
+                default_namespace=ns,
+                embedding_function=build_embedding_function(cfg),
+            )
         except RuntimeError as e:
             logging.error(f"Chroma init failed; using noop. {e}")
             return NoOpStore()
