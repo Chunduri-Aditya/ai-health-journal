@@ -208,8 +208,18 @@ def score_reframe(entry: str, reframe: str) -> ReframeScore:
     # tests/test_reframe_quality.py, which first wrote a fully ungrounded probe
     # expecting `invalidating` and got `generic` instead.
     if not _VALIDATING.search(text) and not result.generic:
+        # "try to focus on X instead" / "instead of dwelling/letting Y" added
+        # after evals/reframe_cases.json's mixed-valence category exposed the
+        # gap: a reframe leaning entirely on the positive half of a mixed-day
+        # entry ("Great news about the project though! Try to focus on that
+        # instead of letting one phone call ruin an otherwise good day.") is
+        # exactly this failure mode and the original phrase list didn't cover
+        # it. General pattern, not matched to that one sentence.
         pivots = re.search(
-            r"\b(the\s+good\s+news|probably\s+just|so\s+there'?s|really\s+no\b)", text, re.IGNORECASE
+            r"\b(the\s+good\s+news|probably\s+just|so\s+there'?s|really\s+no\b|"
+            r"try\s+to\s+focus\s+on|instead\s+of\s+(?:dwelling|letting))",
+            text,
+            re.IGNORECASE,
         )
         if pivots:
             result.invalidating = True

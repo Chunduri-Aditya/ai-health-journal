@@ -148,13 +148,24 @@ _HARM_TO_OTHERS_PATTERNS = re.compile(
 # project is a failure" are not the user judging themselves. "i'm a burden" is
 # included even though it sits close to crisis phrasing -- it is a recognized
 # risk marker, and routing it to a supportive message is the safe direction.
+#
+# _ADVERB_GAP: an optional hedge adverb between the subject and the distress
+# verb. Found missing by evals/crisis_cases.json's "rambling"/"all_caps"
+# categories: "I just feel like such a burden" and "I am SO SICK OF feeling
+# like a failure" both slipped past the original i\s+feel\s+like anchor, which
+# required "feel" immediately after "i" with nothing but whitespace between.
+# People hedge distress constantly ("just", "really", "honestly", "kind of"),
+# so the bare anchor was missing a common, plain-language pattern, not an edge
+# case. Kept as a small closed set rather than a general "any word" gap, which
+# would risk matching across an unrelated clause instead of a single hedge.
+_ADVERB_GAP = r"(?:just|really|honestly|kind\s+of|sort\s+of)\s+"
 _DISTRESS_PATTERNS = re.compile(
     r"\b("
-    r"i(?:'m| am)\s+(?:such\s+)?(?:a\s+)?(?:failure|worthless|useless|broken|pathetic|a\s+burden)|"
+    rf"i(?:'m| am)\s+(?:{_ADVERB_GAP})?(?:such\s+)?(?:a\s+)?(?:failure|worthless|useless|broken|pathetic|a\s+burden)|"
     # "I feel like a failure" is at least as common as "I am a failure" and was
     # missed by the copula-only form above.
-    r"i\s+feel\s+like\s+(?:such\s+)?(?:a\s+)?(?:failure|burden|nothing)|"
-    r"i\s+feel\s+(?:worthless|useless|broken|pathetic)|"
+    rf"i\s+(?:{_ADVERB_GAP})?feel\s+like\s+(?:such\s+)?(?:a\s+)?(?:failure|burden|nothing)|"
+    rf"i\s+(?:{_ADVERB_GAP})?feel\s+(?:worthless|useless|broken|pathetic)|"
     r"i\s+hate\s+myself|"
     r"i(?:'m| am)\s+not\s+good\s+enough|"
     r"i\s+can'?t\s+do\s+anything\s+right|"
@@ -341,12 +352,17 @@ def analyze_entry():
     namespace = _namespace_for()
     new_id = _new_entry_id()
 
+    reference_hits: List["RetrievalHit"] = []  # only populated on the quality_mode path below
+
     try:
         if baseline_json_mode:
             hits = _retrieve_hits(
                 journal_entry, namespace=namespace,
                 top_k=max(1, cfg.retrieval_top_k - 1), exclude_ids={new_id},
             )
+            # Baseline is intentionally weaker (see _run_baseline's docstring):
+            # no reference corpus grounding here either, same as it gets less
+            # RAG context than quality mode by design.
             analysis_json = _run_baseline(
                 journal_entry, model, format_hits_as_context(hits)
             )
@@ -355,12 +371,14 @@ def analyze_entry():
                 journal_entry, namespace=namespace,
                 top_k=cfg.retrieval_top_k, exclude_ids={new_id},
             )
+            reference_hits = _retrieve_reference_hits(journal_entry)
             analysis_json = _run_quality_pipeline(
                 journal_entry,
                 model,
                 verifier_model=selection.verifier,
                 fallback_model=selection.fallback,
                 retrieved_context=format_hits_as_context(hits),
+                reference_context=_format_reference_context(reference_hits),
             )
         else:
             return _run_legacy(journal_entry, model, namespace=namespace, entry_id=new_id)
@@ -373,6 +391,7 @@ def analyze_entry():
             "insight": insight_text,
             "analysis": analysis_json,
             "sources": [_hit_to_source(h) for h in hits],
+            "reference_sources": [_reference_hit_to_source(h) for h in reference_hits],
         })
 
     except ValueError as e:
@@ -606,15 +625,21 @@ def _run_quality_pipeline(
     verifier_model: str,
     fallback_model: str,
     retrieved_context: str = "",
+    reference_context: str = "",
 ) -> Dict[str, Any]:
     """Draft → Verify → Revise pipeline.
 
     `retrieved_context` is resolved by the caller (the /analyze route) so the
     same hits ground the prompt and populate the response `sources`.
+    `reference_context` is a second, separate evidence pool (OpenStax
+    Psychology 2e passages) resolved the same way and populating
+    `reference_sources` -- kept as its own parameter rather than concatenated
+    into `retrieved_context` so the prompt, the verifier, and the API response
+    all keep the two kinds of evidence distinguishable end to end.
     """
     # Step 1: Draft — fix #12: validator_model ensures {} never passes through.
     try:
-        draft_prompt = get_draft_prompt(journal_entry, retrieved_context)
+        draft_prompt = get_draft_prompt(journal_entry, retrieved_context, reference_context)
         draft_json = _provider.json_generate(
             generator_model,
             DRAFT_SYSTEM_PROMPT,
@@ -631,7 +656,7 @@ def _run_quality_pipeline(
 
     # Step 2: Verify — fix #12: validator_model enforces VerifierVerdict shape.
     try:
-        verifier_prompt = get_verifier_prompt(draft_json, journal_entry, retrieved_context)
+        verifier_prompt = get_verifier_prompt(draft_json, journal_entry, retrieved_context, reference_context)
         verdict = _provider.json_generate(
             verifier_model,
             VERIFIER_SYSTEM_PROMPT,
@@ -680,7 +705,7 @@ def _run_quality_pipeline(
         logging.info("Revision required. Calling fallback model.")
         try:
             revision_prompt = get_revision_prompt(
-                draft_json, verdict, journal_entry, retrieved_context
+                draft_json, verdict, journal_entry, retrieved_context, reference_context
             )
             final_json = _provider.json_generate(
                 fallback_model,
@@ -864,6 +889,66 @@ def _hit_to_source(hit: "RetrievalHit") -> Dict[str, Any]:
         "score": round(float(hit.score), 4),
         "snippet": snippet,
         "created_at": hit.metadata.get("created_at", ""),
+    }
+
+
+# ── Shared helpers: reference corpus (OpenStax Psychology 2e) ───────────────
+def _retrieve_reference_hits(journal_entry: str) -> List["RetrievalHit"]:
+    """Retrieve grounding passages from the reference corpus, if enabled.
+
+    Shares `vector_store` with journal retrieval, so this is a NoOpStore (and
+    returns []) whenever RETRIEVAL_ENABLED=false, regardless of
+    REFERENCE_CORPUS_ENABLED -- the reference corpus needs the same underlying
+    Chroma infrastructure the journal RAG uses, it does not stand alone.
+    """
+    if not cfg.reference_corpus_enabled or not vector_store.enabled or not journal_entry:
+        return []
+    return vector_store.query(
+        journal_entry, top_k=cfg.reference_top_k, namespace=cfg.reference_namespace
+    )
+
+
+def _format_reference_context(hits: List["RetrievalHit"]) -> str:
+    """Render reference hits into a labeled block distinct from journal history.
+
+    Deliberately NOT reusing format_hits_as_context: that helper's "[Retrieved
+    Context N | timestamp]" header reads as one more of the user's own past
+    entries. A textbook passage is a different kind of evidence -- generic
+    psychoeducational material, not something the user wrote -- and the prompt
+    needs to see that difference as clearly as the model is expected to honor
+    it (see generator_prompts.DRAFT_SYSTEM_PROMPT rule 13 and
+    verifier_prompts.py's matching groundedness rule).
+    """
+    if not hits:
+        return ""
+    parts: List[str] = []
+    for i, h in enumerate(hits, 1):
+        section = h.metadata.get("section_title", "")
+        book = h.metadata.get("source_book", "a psychology reference")
+        parts.append(f"[Reference {i}: {book}, {section}]\n{h.text}\n")
+    return "\n".join(parts)
+
+
+def _reference_hit_to_source(hit: "RetrievalHit") -> Dict[str, Any]:
+    """Serialize a reference RetrievalHit for the /analyze `reference_sources` field.
+
+    Carries OpenStax's required attribution line on every hit surfaced to the
+    user (docs/CLINICAL_DESIGN.md, "every digital page view"), not just once
+    per response -- a client rendering only the first citation must still show
+    correct attribution for whichever one it renders.
+    """
+    text = hit.text or ""
+    snippet = text[:SNIPPET_LEN] + ("…" if len(text) > SNIPPET_LEN else "")
+    return {
+        "id": hit.id,
+        "score": round(float(hit.score), 4),
+        "snippet": snippet,
+        "section": hit.metadata.get("section", ""),
+        "section_title": hit.metadata.get("section_title", ""),
+        "source_book": hit.metadata.get("source_book", ""),
+        "license": hit.metadata.get("license", ""),
+        "attribution": hit.metadata.get("attribution", ""),
+        "url": hit.metadata.get("source_url", ""),
     }
 
 

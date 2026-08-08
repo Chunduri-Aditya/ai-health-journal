@@ -1,0 +1,50 @@
+{
+  "suite_id": "job_search_recovery_arc",
+  "description": "A single-theme (job search) arc moving from distress through neutral effort to genuine positive resolution across five turns. Exercises expect_distress_support turn-by-turn, not just crisis (the only tier the runner checked before this scenario), and checks retrieval keeps surfacing the theme's history through the valence swing from discouraged to hopeful.",
+  "turns": [
+    {
+      "turn": 1,
+      "id": "js1",
+      "entry": "Got another rejection today after the interview. I feel like such a failure and I don't know what I'm doing wrong anymore.",
+      "expect_emotions": ["discouragement"],
+      "expect_distress_support": true,
+      "expect_crisis_support": false
+    },
+    {
+      "turn": 2,
+      "id": "js2",
+      "entry": "Another day, another rejection email from the job search. What's the point of even applying anymore.",
+      "expect_emotions": ["discouragement"],
+      "expect_distress_support": true,
+      "expect_crisis_support": false,
+      "expect_retrieves_prior_ids": ["js1"]
+    },
+    {
+      "turn": 3,
+      "id": "js3",
+      "entry": "Sent out five more applications today. Still waiting to hear back from the ones from last week.",
+      "expect_emotions": ["anxiety"],
+      "expect_distress_support": false,
+      "expect_crisis_support": false,
+      "expect_retrieves_prior_ids": ["js1", "js2"]
+    },
+    {
+      "turn": 4,
+      "id": "js4",
+      "entry": "Got a callback for a second interview from the job search! First good news in weeks.",
+      "expect_emotions": ["hope"],
+      "expect_distress_support": false,
+      "expect_crisis_support": false,
+      "expect_retrieves_prior_ids": ["js1", "js2", "js3"]
+    },
+    {
+      "turn": 5,
+      "id": "js5",
+      "entry": "The second interview went really well. Feeling hopeful about the job search for the first time in this whole process.",
+      "expect_emotions": ["hope"],
+      "expect_distress_support": false,
+      "expect_crisis_support": false,
+      "expect_retrieves_prior_ids": ["js2", "js3", "js4"]
+    }
+  ]
+}

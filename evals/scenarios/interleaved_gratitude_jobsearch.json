@@ -1,0 +1,46 @@
+{
+  "suite_id": "interleaved_gratitude_jobsearch",
+  "description": "A harder version of mixed_life_journey's interleaving test: that scenario switches theme every THREE turns (a clean A-B-C-A-B-C block pattern); this one switches every SINGLE turn (A-B-A-B-A-B). Retrieval has to discriminate theme turn-by-turn with no run of same-theme turns to lean on.",
+  "turns": [
+    {
+      "turn": 1,
+      "id": "ig1_jobsearch",
+      "entry": "Sent my resume out to three more companies today, feeling the job search grind again.",
+      "expect_emotions": ["discouragement"]
+    },
+    {
+      "turn": 2,
+      "id": "ig2_gratitude",
+      "entry": "Grateful for a slow morning with good coffee before the day got busy.",
+      "expect_emotions": ["contentment"]
+    },
+    {
+      "turn": 3,
+      "id": "ig3_jobsearch",
+      "entry": "Another interview scheduled for next week from the job search, nervous but hopeful.",
+      "expect_emotions": ["hope"],
+      "expect_retrieves_prior_ids": ["ig1_jobsearch"]
+    },
+    {
+      "turn": 4,
+      "id": "ig4_gratitude",
+      "entry": "Thankful for my friend checking in on me today, it meant a lot.",
+      "expect_emotions": ["gratitude"],
+      "expect_retrieves_prior_ids": ["ig2_gratitude"]
+    },
+    {
+      "turn": 5,
+      "id": "ig5_jobsearch",
+      "entry": "The interview went well, feels like the job search might finally be turning around.",
+      "expect_emotions": ["hope"],
+      "expect_retrieves_prior_ids": ["ig1_jobsearch", "ig3_jobsearch"]
+    },
+    {
+      "turn": 6,
+      "id": "ig6_gratitude",
+      "entry": "Another good thing today: finished a book I've been enjoying. Small moments of gratitude keep adding up.",
+      "expect_emotions": ["gratitude"],
+      "expect_retrieves_prior_ids": ["ig2_gratitude", "ig4_gratitude"]
+    }
+  ]
+}

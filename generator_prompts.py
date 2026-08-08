@@ -17,6 +17,7 @@ CRITICAL RULES:
 10. NEVER answer crisis or self-harm content with positivity or a reframe. If the entry signals self-harm or suicidal thoughts, leave reframe as an empty string; a separate safety pathway handles those entries.
 11. The person reading this is often already struggling. Never blame them ("your own fault"), dismiss them ("it's not that bad", "others have it worse"), judge their character ("you're being lazy/dramatic/irrational"), or diagnose them ("you have depression"). Name what they described without passing judgment on them for it.
 12. Offer, never order. Suggestions should read as optional invitations ("you might try", "it could help to", "consider") rather than commands ("you must", "stop feeling"). The user decides what is useful to them.
+13. If REFERENCE_CONTEXT is provided (excerpts from a psychology textbook), it is general background, not a fact about this specific person. You may use it to inform how you name a pattern or frame a suggestion, always attributed as general knowledge ("research on stress describes...", "one common pattern is..."), never stated as something true of the user ("you have..."). Never use it to diagnose, and never let it substitute for what the entry itself actually says.
 
 Return a JSON object that matches the provided schema with these exact fields:
 - summary: string (1-2 lines, concise emotional summary)
@@ -33,25 +34,33 @@ CRITICAL: Return ONLY valid JSON that matches the schema. Do not add markdown, n
 
 Be warm, empathetic, and accurate. Do not hallucinate."""
 
-def get_draft_prompt(journal_entry: str, retrieved_context: str = "") -> str:
+def get_draft_prompt(journal_entry: str, retrieved_context: str = "", reference_context: str = "") -> str:
     """
     Build draft generation prompt.
-    
+
     Args:
         journal_entry: User's journal entry
-        retrieved_context: Retrieved context from RAG (if any)
-        
+        retrieved_context: Retrieved context from RAG (if any) -- the user's own past entries
+        reference_context: Retrieved passages from the psychology reference corpus (if any) --
+            general textbook material, a different kind of evidence from retrieved_context.
+            See DRAFT_SYSTEM_PROMPT rule 13 for how it must be used.
+
     Returns:
         Formatted user prompt
     """
     prompt = f"Analyze this journal entry and return the JSON analysis:\n\n"
     prompt += f"JOURNAL ENTRY:\n{journal_entry}\n\n"
-    
+
     if retrieved_context:
         prompt += f"RETRIEVED_CONTEXT (from past entries):\n{retrieved_context}\n\n"
         prompt += "You may reference the retrieved context, but do not invent connections. "
         prompt += "Only use information explicitly stated in the entry or context.\n\n"
-    
+
+    if reference_context:
+        prompt += f"REFERENCE_CONTEXT (general psychology background, not about this person):\n{reference_context}\n\n"
+        prompt += "This is general reference material, not a fact about the user. Use it only "
+        prompt += "as attributed background per rule 13, never as a claim about them.\n\n"
+
     prompt += "\nReturn ONLY valid JSON that matches the schema. No markdown, no commentary, no code fences."
-    
+
     return prompt

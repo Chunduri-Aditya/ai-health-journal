@@ -52,6 +52,7 @@ def _run_scenario(scenario: Dict[str, Any], persist_dir: str) -> Dict[str, Any]:
     recall_scores: List[float] = []
     top1_hits: List[bool] = []
     crisis_ok: List[bool] = []
+    distress_ok: List[bool] = []
     turn_rows: List[str] = []
 
     with app_module.app.test_client() as client:
@@ -88,6 +89,18 @@ def _run_scenario(scenario: Dict[str, Any], persist_dir: str) -> Dict[str, Any]:
                 crisis_ok.append(ok)
                 note += f"  crisis_support={got} {'✓' if ok else '✗'}"
 
+            # Mirrors the crisis check above exactly. Added alongside the first
+            # scenario to actually exercise the distress tier turn-by-turn:
+            # expect_emotions was already present in every scenario file but is
+            # not machine-checked anywhere in this runner, and a scenario
+            # claiming to test the distress tier deserves better than a
+            # decorative field nobody verifies.
+            if "expect_distress_support" in turn:
+                got_distress = bool(analysis.get("distress_support"))
+                ok_distress = got_distress is turn["expect_distress_support"]
+                distress_ok.append(ok_distress)
+                note += f"  distress_support={got_distress} {'✓' if ok_distress else '✗'}"
+
             turn_rows.append(note)
 
     store.clear_namespace(f"scenario_{scenario['suite_id']}")
@@ -100,6 +113,8 @@ def _run_scenario(scenario: Dict[str, Any], persist_dir: str) -> Dict[str, Any]:
         "top1_rate": (sum(top1_hits) / len(top1_hits)) if top1_hits else 1.0,
         "crisis_ok": all(crisis_ok),
         "crisis_checked": len(crisis_ok),
+        "distress_ok": all(distress_ok),
+        "distress_checked": len(distress_ok),
     }
 
 
@@ -128,16 +143,20 @@ def main() -> int:
             f"  → mean_recall={result['mean_recall']:.3f} "
             f"top1_rate={result['top1_rate']:.3f} "
             f"crisis={'ok' if result['crisis_ok'] else 'FAILED'} "
-            f"({result['crisis_checked']} checked)\n"
+            f"({result['crisis_checked']} checked) "
+            f"distress={'ok' if result['distress_ok'] else 'FAILED'} "
+            f"({result['distress_checked']} checked)\n"
         )
 
     overall_recall = sum(r["mean_recall"] for r in results) / len(results) if results else 0.0
     crisis_all_ok = all(r["crisis_ok"] for r in results)
-    passed = overall_recall >= RECALL_FLOOR and crisis_all_ok
+    distress_all_ok = all(r["distress_ok"] for r in results)
+    passed = overall_recall >= RECALL_FLOOR and crisis_all_ok and distress_all_ok
 
     print("=== summary ===")
     print(f"  overall mean recall: {overall_recall:.3f}  (floor {RECALL_FLOOR})")
     print(f"  crisis expectations: {'all met' if crisis_all_ok else 'FAILURES present'}")
+    print(f"  distress expectations: {'all met' if distress_all_ok else 'FAILURES present'}")
     print(PASS if passed else FAIL)
     return 0 if passed else 1
 

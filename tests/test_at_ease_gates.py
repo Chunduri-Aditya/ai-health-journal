@@ -30,6 +30,15 @@ import app as app_module
         "I feel worthless lately.",
         "I can't do anything right.",
         "Nothing I do matters.",
+        # Hedge adverb between subject and verb. Found by
+        # evals/crisis_cases.json's "rambling" category: the original pattern
+        # required "feel" immediately after "i" with nothing but whitespace
+        # between, so an ordinary hedge ("just", "really", "honestly") broke
+        # the match despite being extremely common in how people actually
+        # phrase distress.
+        "I just feel like such a burden to everyone around me.",
+        "I really feel like a failure lately.",
+        "I'm honestly such a burden to this team.",
     ],
 )
 def test_self_directed_distress_is_detected(entry):

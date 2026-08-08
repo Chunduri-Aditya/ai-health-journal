@@ -57,7 +57,7 @@ _NEGATION_WINDOW = 3
 _POSITIVE = frozenset(
     """
     good great better best wonderful lovely nice pleasant happy happier joy
-    joyful glad delighted grateful thankful thanks thanked appreciate
+    joyful glad delighted grateful thankful thanks thanked thank appreciate
     appreciated proud hope hopeful optimistic relief relieved calm calmer
     peaceful settled steady close connected supported seen heard understood
     loved love warm warmth kind gentle safe comfort comforted content
@@ -65,6 +65,7 @@ _POSITIVE = frozenset(
     accomplished achieved progress win won success successful celebrate
     excited enjoy enjoyed laughed smiled smile lighter easier smooth
     healing healed forward breakthrough gratitude blessing cherish
+    congrats congratulations
     """.split()
 )
 
@@ -151,6 +152,24 @@ _NEGATIVE_PHRASES = (
     "same thing again",
 )
 
+# Emoticons are invisible to _TOKEN (it only keeps letters and apostrophes), so
+# a visible, common sentiment marker was silently discarded before scoring ever
+# ran. Found via an independent validation against GoEmotions (a third-party,
+# human-annotated Reddit dataset, see evals/valence_external_validation.py):
+# "I'm really sorry about your situation :(" scored positive because "sorry"
+# is genuinely ambiguous outside a first-person frame and ":(" -- the clearest
+# signal in the sentence -- was never looked at. Matched on the raw text before
+# tokenisation, same treatment as the multiword phrase lists above. Not
+# exhaustive: covers the common ASCII forms, not the full space of emoji or
+# regional variants.
+_EMOTICON_BOUNDARY = r"(?=[\s.,!?]|$)"
+_POSITIVE_EMOTICONS = re.compile(
+    r"(?:^|\s)(?::-?\)+|:-?d\b|=\)+|\(+:|\^_?\^)" + _EMOTICON_BOUNDARY, re.IGNORECASE
+)
+_NEGATIVE_EMOTICONS = re.compile(
+    r"(?:^|\s)(?::-?\(+|:'\(+|:-?/|:-?\\|=\(+|\)+-?:)" + _EMOTICON_BOUNDARY, re.IGNORECASE
+)
+
 _TOKEN = re.compile(r"[a-z']+")
 
 
@@ -181,6 +200,13 @@ def score(text: str) -> float:
         if phrase in lowered:
             hits -= 1.0
             total += 1.0
+
+    if _POSITIVE_EMOTICONS.search(text):
+        hits += 1.0
+        total += 1.0
+    if _NEGATIVE_EMOTICONS.search(text):
+        hits -= 1.0
+        total += 1.0
 
     tokens = [_normalise(t) for t in _TOKEN.findall(lowered)]
     for idx, token in enumerate(tokens):

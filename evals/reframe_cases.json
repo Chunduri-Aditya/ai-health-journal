@@ -104,6 +104,47 @@
       "reframe": "The good news is that one phone call will not change how your sister feels about you.",
       "label": "bad",
       "failure_mode": "invalidating"
+    },
+
+    {
+      "entry": "Got laid off today after four years at the company. I don't even know what to feel, mostly just numb, and also weirdly relieved which feels wrong to admit.",
+      "reframe": "Four years is a long run, and it makes sense that losing it all at once leaves you feeling numb rather than any one clean emotion. The relief you're noticing isn't a betrayal of how hard this is, it might just mean part of you already knew something wasn't working, and that's worth paying attention to rather than feeling guilty about.",
+      "label": "good",
+      "note": "long, rambling-good: tests that grounding_overlap on a verbose reframe doesn't get diluted into a false generic flag"
+    },
+    {
+      "entry": "Mixed day. Got some good news about the project in the morning, but then had a rough call with my sister in the evening that's still sitting with me.",
+      "reframe": "Both of those things can be true at once: the pride about the project and the weight of that call with your sister. It's worth letting each one have its own space instead of the project's momentum quietly cancelling out how the call with her actually felt.",
+      "label": "good",
+      "note": "mixed-valence entry: reframe must validate the hard part without being pulled toward only the positive half"
+    },
+    {
+      "entry": "Another rejection email today. Fourth one this month.",
+      "reframe": "Four rejections in a month is genuinely discouraging, and it's okay to just feel that without immediately reframing it into a lesson.",
+      "label": "good",
+      "note": "short but grounded (references 'four', 'rejections') and validating -- must not be flagged generic for brevity"
+    },
+
+    {
+      "entry": "My closest friend cancelled on me for the third time and I'm starting to feel disposable.",
+      "reframe": "yeah that happned again, but at least you still got some free time out of it i guess",
+      "label": "bad",
+      "failure_mode": "minimising",
+      "note": "typo noise ('happned') elsewhere in the sentence -- trigger phrase itself is typed correctly, tests the detector isn't thrown off by surrounding noise"
+    },
+    {
+      "entry": "Got laid off today after four years at the company. I don't even know what to feel, mostly just numb, and also weirdly relieved which feels wrong to admit.",
+      "reframe": "Losing a job after four years is a big change to process. A lot of people go through this, and honestly, you should just start applying elsewhere right away instead of dwelling on it, since the market moves fast for people with your experience.",
+      "label": "bad",
+      "failure_mode": "commanding",
+      "note": "trigger ('you should just start applying') buried mid-paragraph rather than an isolated clause -- tests position independence, not just obvious placement"
+    },
+    {
+      "entry": "Mixed day. Got some good news about the project in the morning, but then had a rough call with my sister in the evening that's still sitting with me.",
+      "reframe": "Great news about the project though! Try to focus on that instead of letting one phone call ruin an otherwise good day.",
+      "label": "bad",
+      "failure_mode": "invalidating",
+      "note": "mixed-valence entry answered by leaning only on the positive half and dismissing the hard part -- the failure mode mixed-valence input makes easy to produce"
     }
   ]
 }

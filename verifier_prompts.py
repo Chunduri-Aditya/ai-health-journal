@@ -9,6 +9,8 @@ VERIFIER_SYSTEM_PROMPT = """You are a fact-checking verifier for journaling assi
 Evaluate the draft analysis against the allowed evidence:
 - CURRENT_ENTRY: The user's current journal entry
 - RETRIEVED_CONTEXT: Any retrieved context from past entries (if provided)
+- REFERENCE_CONTEXT: Any retrieved passages from a psychology textbook (if provided) -- general
+  background knowledge, not evidence about this specific person
 
 Check for:
 1. GROUNDEDNESS: Are all claims supported by evidence?
@@ -27,6 +29,12 @@ Check for:
    - DIAGNOSES or labels ("you have depression", "you're clinically anxious") -- this app never diagnoses
    - COMMANDS rather than offers. Suggestions must be gentle and optional ("you might try", "consider") rather than orders ("you must", "stop feeling").
    Observing a pattern the user themselves described is fine and is the job; passing judgment on them for it is not.
+9. REFERENCE_CONTEXT MISUSE: Judge crisis from CURRENT_ENTRY only -- REFERENCE_CONTEXT (textbook
+   passages) must NEVER drive crisis_detected, same rule as RETRIEVED_CONTEXT in point 5, and for
+   the same reason: it is not evidence about this person's present state. Separately, flag and
+   require a rewrite if the draft states something from REFERENCE_CONTEXT as a fact about the user
+   rather than attributed general background ("you have generalized anxiety" instead of "anxiety
+   research describes..."), or uses it to diagnose.
 
 Return a JSON object that matches the provided schema with these exact fields:
 - groundedness_score: float (0.0-1.0, 1.0 = fully grounded)
@@ -40,27 +48,38 @@ CRITICAL: Return ONLY valid JSON that matches the schema. Do not add markdown, n
 
 Be strict but fair. Flag any invented information."""
 
-def get_verifier_prompt(draft_json: dict, journal_entry: str, retrieved_context: str = "") -> str:
+def get_verifier_prompt(
+    draft_json: dict,
+    journal_entry: str,
+    retrieved_context: str = "",
+    reference_context: str = "",
+) -> str:
     """
     Build verifier prompt.
-    
+
     Args:
         draft_json: The draft analysis JSON
         journal_entry: Original journal entry
-        retrieved_context: Retrieved context (if any)
-        
+        retrieved_context: Retrieved context (if any) -- the user's own past entries
+        reference_context: Retrieved psychology-textbook passages (if any) -- see rule 9
+
     Returns:
         Formatted user prompt
     """
     prompt = "Verify this draft analysis against the allowed evidence:\n\n"
     prompt += f"DRAFT ANALYSIS:\n{json.dumps(draft_json, indent=2)}\n\n"
     prompt += f"CURRENT_ENTRY:\n{journal_entry}\n\n"
-    
+
     if retrieved_context:
         prompt += f"RETRIEVED_CONTEXT:\n{retrieved_context}\n\n"
     else:
         prompt += "RETRIEVED_CONTEXT: (none provided)\n\n"
-    
+
+    if reference_context:
+        prompt += f"REFERENCE_CONTEXT:\n{reference_context}\n\n"
+    else:
+        prompt += "REFERENCE_CONTEXT: (none provided)\n\n"
+
     prompt += "Evaluate groundedness, check for hallucinations, and identify safety concerns. "
     prompt += "\nReturn ONLY valid JSON that matches the schema. No markdown, no commentary, no code fences."
 
@@ -72,6 +91,7 @@ def get_revision_prompt(
     verdict: dict,
     journal_entry: str,
     retrieved_context: str = "",
+    reference_context: str = "",
 ) -> str:
     """
     Build a revision prompt from the verifier's verdict.
@@ -80,7 +100,8 @@ def get_revision_prompt(
         draft_json: The original draft analysis
         verdict: The verifier's output JSON
         journal_entry: Original journal entry
-        retrieved_context: Retrieved context (if any)
+        retrieved_context: Retrieved context (if any) -- the user's own past entries
+        reference_context: Retrieved psychology-textbook passages (if any)
 
     Returns:
         Formatted revision prompt
@@ -105,6 +126,8 @@ def get_revision_prompt(
     prompt += f"CURRENT ENTRY:\n{journal_entry}\n\n"
     if retrieved_context:
         prompt += f"RETRIEVED CONTEXT:\n{retrieved_context}\n\n"
+    if reference_context:
+        prompt += f"REFERENCE_CONTEXT (general background, attribute it, do not state it as fact about the user):\n{reference_context}\n\n"
     prompt += (
         "Return the revised JSON with the same structure as the original draft. "
         "Ensure all claims are grounded in the entry. "

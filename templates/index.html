@@ -14,7 +14,10 @@
     <!-- Main Journal Area -->
     <div class="container">
       <div class="card-topbar">
-        <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history" aria-label="Toggle history sidebar">📜 History</button>
+        <div class="topbar-left">
+          <button id="new-session-btn" onclick="newSession()" class="btn-ghost-neutral btn-topbar" title="Start a new session" aria-label="Start a new session">＋ New</button>
+          <button id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle chat history" aria-label="Toggle history sidebar">📜 History</button>
+        </div>
         <button class="toggle-switch" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌃 Theme</button>
       </div>
       <h1>🧠 AI Health Journal</h1>
@@ -42,18 +45,56 @@
         <div class="stage" id="stage-revise">✨ Refining</div>
       </div>
 
+      <!-- Empty state: greeting + starter prompts. Shown until the first
+           analysis of this pageview lands, then swaps with #insights-panel
+           (see showEmptyView / showResultsView). -->
+      <div id="empty-state" class="empty-state">
+        <div class="greeting">
+          <h2 class="greeting-hello">Hello.</h2>
+          <p class="greeting-sub">What's on your mind today?</p>
+        </div>
+        <div class="prompt-cards">
+          <button class="prompt-card" aria-label="Process today: What moment from today is still sitting with you?" data-prompt="The moment from today that's still sitting with me is ">
+            <span class="prompt-card-icon" aria-hidden="true">💭</span>
+            <span class="prompt-card-title">Process today</span>
+            <span class="prompt-card-preview">What moment from today is still sitting with you?</span>
+          </button>
+          <button class="prompt-card" aria-label="Notice a pattern: something you keep reacting to the same way" data-prompt="Lately I've noticed myself reacting the same way when ">
+            <span class="prompt-card-icon" aria-hidden="true">🔁</span>
+            <span class="prompt-card-title">Notice a pattern</span>
+            <span class="prompt-card-preview">Something you keep reacting to the same way</span>
+          </button>
+          <button class="prompt-card" aria-label="Name what's heavy: put words to a feeling you haven't said out loud" data-prompt="Something that's been weighing on me is ">
+            <span class="prompt-card-icon" aria-hidden="true">🫧</span>
+            <span class="prompt-card-title">Name what's heavy</span>
+            <span class="prompt-card-preview">Put words to a feeling you haven't said out loud</span>
+          </button>
+          <button class="prompt-card" aria-label="Small good thing: one thing today that felt a little lighter" data-prompt="One small good thing today was ">
+            <span class="prompt-card-icon" aria-hidden="true">🌱</span>
+            <span class="prompt-card-title">Small good thing</span>
+            <span class="prompt-card-preview">One thing today that felt a little lighter</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Insights display -->
-      <div class="insights-panel">
+      <div id="insights-panel" class="insights-panel" style="display:none;">
         <div class="insights-panel-header">
           <h2 class="insights-header">💡 Insights</h2>
           <button id="copy-insight-btn" class="copy-insight-btn" onclick="copyInsightText()" title="Copy insight text" style="display:none;">📋 Copy</button>
         </div>
         <div id="insight-box" role="region" aria-label="Analysis output" aria-live="polite"></div>
 
-        <!-- Sources (RAG) -->
+        <!-- Sources (RAG, journal history) -->
         <div id="sources-container" style="display:none;">
           <button id="sources-toggle" onclick="toggleSources()">🔍 Show sources</button>
           <div id="sources-list"></div>
+        </div>
+
+        <!-- Reference sources (OpenStax Psychology 2e, when REFERENCE_CORPUS_ENABLED) -->
+        <div id="reference-sources-container" style="display:none;">
+          <button id="reference-sources-toggle" onclick="toggleReferenceSources()">📚 Show reference passages</button>
+          <div id="reference-sources-list"></div>
         </div>
       </div>
 
@@ -69,21 +110,14 @@
         <div class="input-icons">
           <button id="record-button" onclick="toggleRecording()" class="icon-pill" aria-label="Start voice recording" title="Record voice entry">🎙️</button>
           <button onclick="getPrompt()" class="icon-pill" aria-label="Suggest a journaling prompt" title="Suggest a prompt">✨</button>
+          <button onclick="submitEntry()" class="icon-pill icon-pill-primary" id="analyze-btn" aria-label="Analyze entry" title="Analyze (or press Enter)">🚀</button>
+          <button onclick="abortResponse()" id="stop-button" class="icon-pill icon-pill-stop" style="display:none;" aria-label="Stop current analysis" title="Stop">🛑</button>
         </div>
       </div>
       <span id="record-status" aria-live="polite"></span>
       <div class="textarea-meta">
         <span class="keyboard-hint">Enter to analyze &nbsp;·&nbsp; Shift+Enter for new line</span>
         <span id="char-counter" class="char-counter">0 / 1000</span>
-      </div>
-
-      <!-- Action buttons -->
-      <div class="button-group">
-        <button onclick="newSession()" class="btn-ghost-neutral">＋ New Session</button>
-        <div class="run-controls">
-          <button onclick="submitEntry()" class="btn-primary" id="analyze-btn">🚀 Analyze</button>
-          <button onclick="abortResponse()" id="stop-button" class="btn-stop" style="display:none;" aria-label="Stop current analysis">🛑 Stop</button>
-        </div>
       </div>
     </div>
 
@@ -150,6 +184,37 @@
     function toggleSidebar() {
       document.getElementById("sidebar").classList.toggle("hidden");
     }
+
+    // ─── Empty state ↔ results view ─────────────────────────────────────────
+    // Two mutually exclusive views in the main card: the greeting + starter
+    // prompts (nothing analyzed yet this pageview) and the insights panel
+    // (a result, or an error, is showing). Explicit calls at each transition
+    // point rather than a single "does insight-box have content" check, so the
+    // loading state ("Thinking...") also counts as a result view -- otherwise
+    // the greeting cards would still be showing while a request is in flight.
+    const emptyStateEl   = document.getElementById("empty-state");
+    const insightsPanelEl = document.getElementById("insights-panel");
+
+    function showResultsView() {
+      emptyStateEl.style.display = "none";
+      insightsPanelEl.style.display = "block";
+    }
+
+    function showEmptyView() {
+      emptyStateEl.style.display = "flex";
+      insightsPanelEl.style.display = "none";
+    }
+
+    // ─── Starter prompt cards ────────────────────────────────────────────────
+    document.querySelectorAll(".prompt-card").forEach((card) => {
+      card.addEventListener("click", () => {
+        const text = card.dataset.prompt || "";
+        entryBox.value = text;
+        entryBox.dispatchEvent(new Event("input"));
+        entryBox.focus();
+        entryBox.setSelectionRange(entryBox.value.length, entryBox.value.length);
+      });
+    });
 
     // ─── Char counter ─────────────────────────────────────────────────────────
     entryBox.addEventListener("input", () => {
@@ -342,7 +407,7 @@
     }
 
     // ─── Submit ───────────────────────────────────────────────────────────────
-    // Analyze and Stop occupy the same slot in .run-controls; only one is ever
+    // Analyze and Stop occupy the same slot in the input pill; only one is ever
     // visible, so the primary CTA reads as "morphing" into Stop rather than a
     // permanently-visible disabled button sitting beside it.
     function setRunningState(isRunning) {
@@ -356,6 +421,7 @@
 
       let succeeded = false;
       setRunningState(true);
+      showResultsView();
       copyInsightBtn.style.display = "none";
       insightBox.innerHTML = "";
 
@@ -388,13 +454,15 @@
           } else {
             revealTextSlowly(data.insight);
           }
-          renderSources(data.analysis);
+          renderSources(data.sources);
+          renderReferenceSources(data.reference_sources);
           storeMessage(entry, data.insight, data.analysis);
           copyInsightBtn.style.display = "inline-flex";
           succeeded = true;
         } else {
           insightBox.textContent = data.error || "That didn't come through. Your entry is still here.";
           renderSources(null);
+          renderReferenceSources(null);
           showToast("That didn't come through.", "error");
         }
       } catch (err) {
@@ -405,6 +473,7 @@
           showToast("Couldn't reach the service.", "error");
         } else {
           insightBox.textContent = "";
+          showEmptyView();
           showToast("Stopped. Your entry is still here.", "info");
         }
       }
@@ -472,6 +541,7 @@
     }
 
     window.addEventListener("load", () => {
+      showEmptyView();
       loadSessionHistory();
       loadModels();
     });
@@ -617,6 +687,7 @@
       insightBox.innerHTML = "";
       copyInsightBtn.style.display = "none";
       closeHistoryDetail();
+      showEmptyView();
       showToast("New session started.", "success");
     }
 
@@ -679,21 +750,25 @@
     }
 
     // ─── Sources ──────────────────────────────────────────────────────────────
-    function renderSources(analysis) {
+    // Reads the real top-level `sources` field /analyze returns (computed by
+    // app.py from actual Chroma retrieval hits: {id, score, snippet,
+    // created_at}), not analysis.grounding_sources -- that schema field is
+    // optional LangChain-chain enrichment the Ollama pipeline never
+    // populates, so reading it left this panel always empty regardless of
+    // whether retrieval actually found anything.
+    function renderSources(sources) {
       const container = document.getElementById("sources-container");
       const list      = document.getElementById("sources-list");
       const toggle    = document.getElementById("sources-toggle");
-      if (!analysis || !Array.isArray(analysis.grounding_sources) || !analysis.grounding_sources.length) {
+      if (!Array.isArray(sources) || !sources.length) {
         container.style.display = "none";
         list.innerHTML = "";
         return;
       }
-      const mode  = analysis.grounding_mode || "local_chroma";
-      const label = mode === "pinecone" ? "Pinecone" : "Local Chroma";
-      let html = `<div class="sources-label">Sources (${label}):</div>`;
-      analysis.grounding_sources.forEach((s, i) => {
+      let html = `<div class="sources-label">Sources (your past entries):</div>`;
+      sources.forEach((s, i) => {
         const score = typeof s.score === "number" ? s.score.toFixed(3) : s.score;
-        html += `<div class="source-item">[#${i + 1}] score=${score} – ${s.preview}</div>`;
+        html += `<div class="source-item">[#${i + 1}] score=${score} – ${s.snippet}</div>`;
       });
       list.innerHTML = html;
       container.style.display = "block";
@@ -707,6 +782,45 @@
       const shown  = list.style.display !== "none";
       list.style.display = shown ? "none" : "block";
       toggle.textContent = shown ? "🔍 Show sources" : "🔍 Hide sources";
+    }
+
+    // Reads the top-level `reference_sources` field, always present (empty
+    // array when REFERENCE_CORPUS_ENABLED is off or nothing matched) so this
+    // never needs to branch on whether the feature is turned on. Every citation
+    // carries its own OpenStax attribution line -- required on "every digital
+    // page view" per the book's license, not just once per response.
+    function renderReferenceSources(referenceSources) {
+      const container = document.getElementById("reference-sources-container");
+      const list      = document.getElementById("reference-sources-list");
+      const toggle     = document.getElementById("reference-sources-toggle");
+      if (!Array.isArray(referenceSources) || !referenceSources.length) {
+        container.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+      let html = `<div class="sources-label">Reference passages (${escapeHtml(referenceSources[0].source_book || "OpenStax Psychology 2e")}):</div>`;
+      referenceSources.forEach((r, i) => {
+        const score = typeof r.score === "number" ? r.score.toFixed(3) : r.score;
+        html += `<div class="source-item reference-source-item">`;
+        html += `[#${i + 1}] ${escapeHtml(r.section || "")} ${escapeHtml(r.section_title || "")} (score=${score})<br>`;
+        html += `${escapeHtml(r.snippet || "")}<br>`;
+        if (r.url) {
+          html += `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="reference-attribution">${escapeHtml(r.attribution || r.url)}</a>`;
+        }
+        html += `</div>`;
+      });
+      list.innerHTML = html;
+      container.style.display = "block";
+      list.style.display = "none";
+      toggle.textContent = "📚 Show reference passages";
+    }
+
+    function toggleReferenceSources() {
+      const list   = document.getElementById("reference-sources-list");
+      const toggle = document.getElementById("reference-sources-toggle");
+      const shown  = list.style.display !== "none";
+      list.style.display = shown ? "none" : "block";
+      toggle.textContent = shown ? "📚 Show reference passages" : "📚 Hide reference passages";
     }
 
     // ─── Info tooltips ────────────────────────────────────────────────────────

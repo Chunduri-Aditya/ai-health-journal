@@ -15,7 +15,18 @@
     "cases are drawn from ordinary journaling language and documented collisions",
     "rather than reverse-engineered from the regex, and the known gaps are included",
     "rather than excluded, but this is not an unbiased held-out set. Treat",
-    "specificity as the more trustworthy half: false positives were not designed for."
+    "specificity as the more trustworthy half: false positives were not designed for.",
+    "",
+    "SECOND BATCH (typo/rambling/all_caps/topic_pivot/adversarial_negation categories):",
+    "harder cases -- texting-style typos, the crisis phrase buried mid-ramble, ALL",
+    "CAPS, a mundane entry that pivots into crisis language, and adversarial",
+    "negation (past-tense recovery language that still contains crisis vocabulary).",
+    "Authored blind, before running the eval once, then triaged: real misses on",
+    "plausible everyday phrasing got fixed in app.py; misses that would need fuzzy",
+    "or semantic matching are marked known_gap, same discipline as the first batch.",
+    "`accepted_fp: true` on the negation cases follows the documented asymmetric-risk",
+    "stance (app.py): a false positive here costs one unneeded supportive message,",
+    "which is the accepted direction to err."
   ],
   "cases": [
     {"label": "crisis", "category": "explicit", "text": "I want to kill myself."},
@@ -91,6 +102,33 @@
     {"label": "neutral", "category": "ordinary", "text": "Started running in the mornings and my energy is returning."},
 
     {"label": "neutral", "category": "accepted_false_positive", "accepted_fp": true,
-     "text": "Went bungee jumping off a bridge today, terrifying and amazing."}
+     "text": "Went bungee jumping off a bridge today, terrifying and amazing."},
+
+    {"label": "crisis", "category": "rambling", "text": "Ugh today was just so much. Work again, traffic again, and honestly by the time I got home I just dont want to wake up tomorrow tbh. Anyway going to bed."},
+    {"label": "crisis", "category": "rambling", "text": "So my sister called, we talked about mom's birthday, and then somewhere in there I said out loud that I want to die and she got really quiet."},
+    {"label": "crisis", "category": "all_caps", "text": "I JUST WANT TO END IT ALL AND NOBODY WOULD EVEN NOTICE"},
+    {"label": "crisis", "category": "topic_pivot", "text": "Work has been so stressful, my manager keeps piling on deadlines, and lately I've just been thinking I don't want to be alive anymore."},
+    {"label": "crisis", "category": "minimal_punctuation", "text": "cant do this anymore i want to die i just want it to stop"},
+
+    {"label": "crisis", "category": "typo", "known_gap": true,
+     "text": "i dont wana b here anymor, its too much"},
+    {"label": "crisis", "category": "typo", "known_gap": true,
+     "text": "sometimes i think about hurtin myself and i dont tell anyone"},
+
+    {"label": "neutral", "category": "adversarial_negation", "accepted_fp": true,
+     "text": "I used to want to die most days, but therapy has actually helped and I don't feel that way anymore."},
+    {"label": "neutral", "category": "adversarial_negation", "accepted_fp": true,
+     "text": "A year ago I was hurting myself regularly. I've been six months clean and I'm proud of that."},
+
+    {"label": "distress", "category": "rambling", "text": "Long day. Meetings back to back, barely ate, and by the end of it I just feel like such a burden to everyone around me. Going to try to sleep it off."},
+    {"label": "distress", "category": "typo", "text": "i feel like such a failure lately, cant shake it"},
+    {"label": "distress", "category": "all_caps", "known_gap": true,
+     "text": "I AM SO SICK OF FEELING LIKE A FAILURE AT EVERYTHING"},
+
+    {"label": "neutral", "category": "vague_hopelessness", "text": "i cant anymore...................."},
+    {"label": "neutral", "category": "rambling_ordinary", "text": "Long one today -- coffee spilled on my desk first thing, then the standup ran over, then I forgot my lunch, then traffic on the way home. Just one of those days, nothing serious."},
+    {"label": "neutral", "category": "topic_pivot_ordinary", "text": "Started the morning stressed about the deadline, but by lunch I'd knocked out half the tickets and actually felt pretty good about it."},
+    {"label": "neutral", "category": "reported_speech_typo", "accepted_fp": true,
+     "text": "my friend texted saying she wants to end it all and idk what to say back to her"}
   ]
 }

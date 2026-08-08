@@ -155,6 +155,7 @@ embedded on-device and retrieved to ground new reflections. Everything below the
 - **Modern UI**: typewriter animations, dark mode, collapsible history sidebar, request cancellation, model selector, quality mode toggle
 - **Voice transcription** (`/transcribe`): local Whisper, optional dependency
 - **Model benchmark lab** (`/benchmark/latest`): compare local models on a patient-case suite
+- **Reference corpus** (`REFERENCE_CORPUS_ENABLED`): a second, separately cited retrieval source — OpenStax *Psychology 2e* (CC BY-NC-SA 4.0) — grounding reflections in general psychology background, always attributed distinctly from your own journal history. Off by default. `make ingest-reference` to build it; see [`docs/CLINICAL_DESIGN.md`](docs/CLINICAL_DESIGN.md#7-the-reference-corpus) for the license terms and citation requirements
 - **DPO fine-tuning pipeline**: build preference datasets and train LoRA adapters to improve groundedness
 
 ## Quickstart
@@ -1013,7 +1014,7 @@ flowchart LR
 |----------|--------|-------|--------|
 | `/` | GET | - | HTML page |
 | `/ping` | GET | - | `{"status": "ok", "version": "...", "retrieval": {"backend": "chroma\|pinecone\|none", "enabled": bool, "healthy": bool}}` |
-| `/analyze` | POST | `{"entry": "string", "model": "string" (opt), "quality_mode": bool (opt), "baseline_json_mode": bool (opt)}` | `{"insight": "string", "analysis": {...}}` (quality/baseline_json mode) or `{"insight": "string"}` (fast mode) |
+| `/analyze` | POST | `{"entry": "string", "model": "string" (opt), "quality_mode": bool (opt), "baseline_json_mode": bool (opt)}` | `{"insight": "string", "analysis": {...}, "sources": [...], "reference_sources": [...]}` (quality/baseline_json mode) or `{"insight": "string"}` (fast mode). `sources` is your own retrieved journal history; `reference_sources` is retrieved reference-corpus passages (empty unless `REFERENCE_CORPUS_ENABLED=true`), each carrying its own OpenStax attribution line |
 | `/prompt` | POST | - | `{"prompt": "string"}` or `{"error": "string"}` |
 | `/session/history` | GET | - | `[{"entry": "string", "response": "string"}, ...]` |
 | `/session/reset` | POST | - | `{"status": "cleared"}` |

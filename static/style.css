@@ -113,13 +113,17 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
 .toast-warn    { border-left: 4px solid #f59e0b; }
 .toast-info    { border-left: 4px solid var(--accent-primary); }
 
-/* ── Card top bar (History + Theme, anchored inside the card) ───────────── */
+/* ── Card top bar (New session + History left, Theme right) ─────────────── */
 .card-topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.25rem;
 }
+
+.topbar-left { display: flex; gap: .6rem; }
+
+.btn-topbar { padding: .55rem .9rem; font-size: .85rem; }
 
 .toggle-switch,
 #sidebar-toggle {
@@ -258,6 +262,84 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
   50%       { opacity: .6; }
 }
 
+/* ── Empty state (greeting + starter prompts) ────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  padding: 2.5rem 0 2rem;
+  text-align: center;
+  animation: fadeIn .5s ease-out;
+}
+
+.greeting-hello {
+  font-size: 2.25rem;
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -.02em;
+  margin-bottom: .35rem;
+}
+
+.greeting-sub {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.prompt-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .9rem;
+  width: 100%;
+}
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .5rem;
+  text-align: left;
+  padding: 1.1rem 1.1rem 1.25rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all .2s ease;
+  height: 100%;
+}
+.prompt-card:hover, .prompt-card:focus-visible {
+  border-color: var(--accent-primary);
+  background: var(--accent-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.prompt-card-icon { font-size: 1.35rem; line-height: 1; }
+
+.prompt-card-title {
+  font-size: .92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prompt-card-preview {
+  font-size: .82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .prompt-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .prompt-cards { grid-template-columns: 1fr; }
+  .greeting-hello { font-size: 1.85rem; }
+}
+
 /* ── Insights panel ──────────────────────────────────────────────────────── */
 .insights-panel {
   margin-bottom: 1.5rem;
@@ -301,13 +383,6 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
   color: var(--text-primary);
   white-space: pre-wrap;
   word-wrap: break-word;
-}
-
-#insight-box:empty::before {
-  content: "Whatever's on your mind, write it below. What comes back will appear here.";
-  color: var(--text-secondary);
-  opacity: .6;
-  font-style: italic;
 }
 
 #insight-box.animate-in { animation: fadeIn .4s ease-out; }
@@ -482,37 +557,86 @@ h3 { font-size: .85rem; font-weight: 600; text-transform: uppercase; letter-spac
 .sources-label { font-size: .8rem; color: var(--text-secondary); margin-bottom: .4rem; opacity: .8; }
 .source-item   { font-size: .82rem; color: var(--text-secondary); line-height: 1.5; padding: .2rem 0; }
 
-/* ── Input command center (textarea + embedded mic/prompt icons) ─────────── */
-.textarea-wrapper { position: relative; margin-bottom: .35rem; }
+/* ── Reference sources (OpenStax Psychology 2e) ─────────────────────────── */
+/* Separate container from journal #sources-container on purpose (not just
+   separate styling): the two are different kinds of evidence, and visually
+   merging them would undo the point of citing them distinctly in the API
+   response and the prompt. */
+#reference-sources-container {
+  margin-top: .75rem;
+  padding: .9rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+#reference-sources-toggle {
+  background: transparent;
+  color: var(--accent-primary);
+  padding: .3rem 0;
+  font-size: .875rem;
+  text-decoration: underline;
+  cursor: pointer;
+  border: none;
+}
+#reference-sources-toggle:hover { color: var(--accent-hover); text-decoration: none; }
+
+.reference-source-item { border-top: 1px solid var(--border-color); padding-top: .5rem; margin-top: .5rem; }
+.reference-source-item:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+.reference-attribution {
+  display: inline-block;
+  margin-top: .3rem;
+  font-size: .78rem;
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+.reference-attribution:hover { color: var(--accent-hover); }
+
+/* ── Input command center (textarea styled as a soft floating pill bar) ──── */
+/* Not a literal single-line pill (border-radius: 999px): entries run up to
+   1000 characters and multi-line is a supported input method (Shift+Enter),
+   so a fully circular-ended bar would clip or look broken the moment someone
+   writes more than one line. This keeps the rounded, elevated "floating bar"
+   read of the reference design while staying usable for real journal length. */
+.textarea-wrapper {
+  position: relative;
+  margin-bottom: .35rem;
+  border-radius: 28px;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  transition: all .3s ease;
+}
+.textarea-wrapper:focus-within {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 4px var(--accent-light), var(--shadow-lg);
+  background: var(--bg-secondary);
+}
 
 textarea {
   width: 100%;
-  min-height: 150px;
-  padding: 1.1rem 3.75rem 1.1rem 1.25rem; /* extra right padding clears the embedded icons */
-  border-radius: var(--radius-md);
-  border: 2px solid var(--border-color);
-  background: var(--bg-tertiary);
+  min-height: 60px;
+  max-height: 320px;
+  padding: 1.1rem 11rem 1.1rem 1.5rem; /* right padding clears 4 embedded icons */
+  border-radius: 28px;
+  border: none;
+  background: transparent;
   color: var(--text-primary);
   font-size: 1rem;
   font-family: inherit;
   resize: vertical;
-  transition: all .3s ease;
   display: block;
 }
-textarea:focus {
-  outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 4px var(--accent-light);
-  background: var(--bg-secondary);
-}
+textarea:focus { outline: none; }
 textarea::placeholder { color: var(--text-secondary); opacity: .6; }
 
 .input-icons {
   position: absolute;
-  right: .65rem;
-  bottom: .65rem;
+  right: .55rem;
+  bottom: .55rem;
   display: flex;
-  gap: .4rem;
+  gap: .35rem;
 }
 
 .icon-pill {
@@ -531,6 +655,22 @@ textarea::placeholder { color: var(--text-secondary); opacity: .6; }
   transition: all .2s ease;
 }
 .icon-pill:hover { background: var(--accent-primary); border-color: var(--accent-primary); transform: scale(1.05); }
+
+.icon-pill-primary {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  color: #F1F2F6;
+  box-shadow: var(--shadow-sm);
+}
+.icon-pill-primary:hover { opacity: .92; transform: scale(1.05); background: var(--gradient-primary); }
+
+.icon-pill-stop {
+  background: var(--danger-soft);
+  border-color: var(--danger-soft);
+  color: #F1F2F6;
+  animation: stopPulse 1.6s ease-in-out infinite;
+}
+.icon-pill-stop:hover { opacity: .9; background: var(--danger-soft); }
 
 #record-status {
   display: block;
@@ -576,14 +716,6 @@ button {
 }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-.btn-primary {
-  background: var(--gradient-primary);
-  color: #F1F2F6;
-  font-weight: 700;
-  box-shadow: var(--shadow-md);
-}
-.btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--shadow-lg); opacity: .92; }
-
 .btn-ghost-neutral {
   background: var(--bg-ghost);
   color: var(--text-secondary);
@@ -591,30 +723,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 }
 .btn-ghost-neutral:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-primary); }
 
-.btn-stop {
-  background: var(--danger-soft);
-  color: #F1F2F6;
-  font-weight: 600;
-  border: 2px solid var(--danger-soft);
-  animation: stopPulse 1.6s ease-in-out infinite;
-}
-.btn-stop:hover:not(:disabled) { opacity: .9; }
-
+/* Reused by .icon-pill-stop (the Stop button now lives in the input pill,
+   not a standalone button) -- same pulse, new home. */
 @keyframes stopPulse {
   0%, 100% { border-color: var(--danger-soft); box-shadow: 0 0 0 0 rgba(225,112,85,.35); }
   50%      { border-color: #F1F2F6; box-shadow: 0 0 0 6px rgba(225,112,85,0); }
 }
-
-.button-group {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .75rem;
-  flex-wrap: wrap;
-  margin-top: 1.25rem;
-}
-
-.run-controls { display: flex; }
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 #sidebar {
@@ -728,10 +842,10 @@ textarea:focus-visible {
 
   .container { padding: 1.5rem; }
 
-  .button-group { flex-direction: column; align-items: stretch; }
-  .button-group button,
-  .run-controls { width: 100%; }
-  .button-group button { justify-content: center; }
+  .prompt-cards { grid-template-columns: 1fr; }
+
+  textarea { padding-right: 1.5rem; padding-bottom: 3.25rem; }
+  .input-icons { right: .5rem; bottom: .5rem; }
 
   .stage-indicator { flex-wrap: wrap; gap: .35rem; }
 }

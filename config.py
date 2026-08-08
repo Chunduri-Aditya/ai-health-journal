@@ -38,6 +38,16 @@ class Config:
     embedding_backend: str
     ollama_embed_model: str
     ollama_embed_url: str
+    # ── Reference corpus (OpenStax Psychology 2e, CC BY-NC-SA 4.0) ──────────
+    # A second, separate Chroma namespace from the journal RAG, populated by
+    # scripts/ingest_reference_corpus.py. Off by default like every other
+    # optional surface in this app (RETRIEVAL_ENABLED, ALLOW_CLOUD_*): a fresh
+    # clone with no .env should not silently ground reflections in textbook
+    # material nobody asked for. See docs/CLINICAL_DESIGN.md for the citation
+    # and attribution requirements this gate exists to keep honest.
+    reference_corpus_enabled: bool
+    reference_top_k: int
+    reference_namespace: str
     history_personalization_enabled: bool
     # ── LLM backend (Upgrade 08) ─────────────────────────────────────────────
     # llm_backend: "ollama" (default, local) | "anthropic" (cloud, opt-in).
@@ -103,6 +113,9 @@ def load_config() -> Config:
         embedding_backend=g("EMBEDDING_BACKEND", "default").lower(),
         ollama_embed_model=g("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         ollama_embed_url=g("OLLAMA_EMBED_URL", "http://localhost:11434"),
+        reference_corpus_enabled=g("REFERENCE_CORPUS_ENABLED", "false").lower() == "true",
+        reference_top_k=int(g("REFERENCE_TOP_K", "2")),
+        reference_namespace=g("REFERENCE_NAMESPACE", "reference:psychology"),
         history_personalization_enabled=g("HISTORY_PERSONALIZATION_ENABLED", "false").lower() == "true",
         # Upgrade 08 — LLM backend gate
         llm_backend=g("LLM_BACKEND", "ollama").lower(),

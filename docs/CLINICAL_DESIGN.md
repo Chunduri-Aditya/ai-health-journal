@@ -168,6 +168,7 @@ forgotten. Each is a deliberate stop, not an oversight.
 | Non English self harm phrasing is not caught by the floor | `tests/test_crisis_gate_adversarial.py` | The floor is English only. The verifier prompt carries the mitigation |
 | Street addresses and full names are not redacted | `tests/test_privacy_adversarial.py`, `privacy/redact.py` | Needs semantic understanding a regex cannot provide. A regex that gives false confidence is worse than one honest about its coverage |
 | `RAG_NAMESPACE_MODE=user` trusts an unauthenticated header | `tests/test_privacy_adversarial.py` | Not exploitable at the shipped default (`session`). Must not be enabled without real authentication |
+| The crisis floor has no reported-speech exemption, unlike the distress floor | `evals/crisis_cases.json` (`accepted_fp: true`, category `reported_speech_typo`) | Considered and declined, not overlooked: reusing the distress tier's `_REPORTED_SPEECH` guard would also suppress "My therapist said I should talk about wanting to die" — genuine first-person disclosure framed through a third party. That is a false negative on the one tier where false negatives are the unacceptable error (§4). A journal entry about a friend's crisis firing the user's own support message is the accepted, lower-cost direction. Full tradeoff in `docs/IMPROVEMENTS.md` §13 |
 
 Two crisis patterns were tried and **removed** after live false positive testing
 (`app.py:90`): bare "kms" collides with the AWS KMS acronym, which is a real
@@ -176,7 +177,73 @@ ordinary idiom "an overdose of X".
 
 ---
 
-## 7. Escalation
+## 7. The reference corpus
+
+A second, separate retrieval source: passages from OpenStax *Psychology 2e*
+(Rice University, CC BY-NC-SA 4.0), covering stress and health, emotion and
+motivation, personality, and therapy and treatment. Ingested by
+`scripts/ingest_reference_corpus.py`, off by default (`REFERENCE_CORPUS_ENABLED`).
+
+**Why it exists.** The construct map in section 3 shows this app already
+implements behavior corresponding to real psychological constructs (cognitive
+restructuring, motivational interviewing, stepped care). The reference corpus
+lets a reflection cite the general knowledge those constructs come from,
+instead of that knowledge only ever existing as an uncredited pattern in a
+prompt.
+
+**Why it is architecturally separate from journal history, not merged into
+one retrieval call.** The two are different kinds of evidence. Journal
+history is the user's own writing; a textbook passage is generic
+psychoeducational material that happens to be relevant. Collapsing them into
+one ranked list risks a reflection quietly leaning on textbook material with
+no visible sign of it — the same failure mode this whole document exists to
+prevent for the model's therapeutic tone. So:
+
+- Separate Chroma namespace (`reference:psychology`), separate config gate,
+  separate top-k (`REFERENCE_TOP_K`, default 2, deliberately smaller than
+  journal retrieval's default 3 so it stays a minor input, not a dominant one).
+- Separate prompt block (`REFERENCE_CONTEXT`, not blended into
+  `RETRIEVED_CONTEXT`) with its own rule
+  (`generator_prompts.py` rule 13): attribute it as general background
+  ("research on stress describes...") or don't use it, never state it as a
+  fact about the user, never use it to diagnose.
+- Separate verifier rule (`verifier_prompts.py` rule 9), mirroring rule 5's
+  treatment of journal history: reference material must **never** drive
+  `crisis_detected`, for the same reason a past entry must not — it is not
+  evidence about the person's present state, and generic textbook material
+  is if anything a weaker signal about *this specific person* than their own
+  past writing is.
+- Separate, structurally enforced isolation for the crisis floor
+  specifically: `_is_crisis` and `_apply_reframe_gate` do not take
+  `reference_context` as a parameter at all (`tests/test_reference_corpus.py`
+  asserts this directly via the function signature). The deterministic floor
+  cannot be influenced by reference material regardless of what any prompt
+  says, the same category of guarantee section 5 makes for journal-derived
+  crisis judgment.
+- Separate API field (`reference_sources`, not folded into `sources`) and
+  separate UI panel, each citation carrying OpenStax's required attribution
+  line individually (the license requires it on every page view the content
+  reaches, not once per response).
+
+**License compliance, stated as hard constraints, not aspirations.** CC
+BY-NC-SA 4.0 permits non-commercial use, remix, and redistribution with
+attribution and share-alike terms — verified directly from the book's own
+preface, not assumed from search results (an initial search claimed CC BY 4.0
+for this title; the book's actual preface says NC-SA, see
+`docs/IMPROVEMENTS.md`'s ingestion write-up for the correction). Two rules
+follow and are enforced structurally, not just by convention:
+
+1. The ingested text and its embeddings are **never committed** to this
+   repository. `.runtime/reference_corpus/` (the fetch cache) and
+   `storage/chroma/` (the vector store) are both gitignored.
+2. Every citation surfaced to the user carries the exact required line,
+   "Access for free at `<url>`" — not a paraphrase, the literal OpenStax
+   attribution text, rendered per-citation so a client showing only one
+   still shows it correctly attributed.
+
+---
+
+## 8. Escalation
 
 When the crisis tier fires, the app clears the reframe and shows a message that
 points outward to human support (`app.py:218`). It does not attempt to assess
@@ -192,7 +259,7 @@ with region appropriate crisis resources.**
 
 ---
 
-## 8. What is not yet measured
+## 9. What is not yet measured
 
 Honest accounting of the gap between what is built and what is evidenced:
 
@@ -250,7 +317,7 @@ See [`IMPROVEMENTS.md`](IMPROVEMENTS.md) for the work closing these gaps.
 
 ---
 
-## 9. Disclaimer
+## 10. Disclaimer
 
 This tool is for personal reflection. It is not medical advice, not therapy, and
 not a crisis service. If you are struggling, please contact a licensed

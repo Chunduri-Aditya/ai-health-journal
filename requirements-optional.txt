@@ -19,6 +19,11 @@ faster-whisper>=1.0.0
 # Multipart form handling (for /transcribe)
 python-multipart>=0.0.9
 
+# HTML extraction for the reference corpus ingestion script (optional, admin
+# task, not a runtime dependency of the Flask app itself).
+# scripts/ingest_reference_corpus.py
+beautifulsoup4>=4.12.0
+
 # Note: torch, onnxruntime, and other heavy deps are installed
 # as transitive dependencies of sentence-transformers and faster-whisper.
 # If you only need core features, skip this file.

@@ -95,6 +95,15 @@
     {"trap": "clean", "query": "feeling thankful for small everyday things", "relevant_ids": ["grat1", "grat2"]},
     {"trap": "clean", "query": "worrying about money and bills", "relevant_ids": ["money1"]},
     {"trap": "clean", "query": "harsh self judgment and feeling not good enough", "relevant_ids": ["selfcrit1", "selfcrit2"]},
-    {"trap": "clean", "query": "mixed feelings about a big life change", "relevant_ids": ["move1"]}
+    {"trap": "clean", "query": "mixed feelings about a big life change", "relevant_ids": ["move1"]},
+
+    {"trap": "noisy_typo", "query": "so exausted from teh workload and presure at my jobb", "relevant_ids": ["work_load1", "work_load2"]},
+    {"trap": "noisy_typo", "query": "cant sleap at night my mind keeps racing", "relevant_ids": ["sleep_bad1", "sleep_bad2"]},
+    {"trap": "noisy_typo", "query": "greatful for smal everyday things liek coffee and sun", "relevant_ids": ["grat1", "grat2"]},
+    {"trap": "noisy_typo", "query": "money stresss and worring about bils", "relevant_ids": ["money1"]},
+
+    {"trap": "noisy_rambling", "query": "ok so today was a lot, i had coffee this morning and it was fine, traffic was normal i guess, but honestly the thing that's really sticking with me is just how deep in debt i feel and the numbers not adding up this month, anyway going to try to sleep", "relevant_ids": ["money1"]},
+    {"trap": "noisy_rambling", "query": "long day, lots happened, saw a funny video, ate lunch late, but the part i keep thinking about is the fight with my partner again over the exact same thing we always argue about, rest of the day is a blur honestly", "relevant_ids": ["rel_bad1", "rel_bad2"]},
+    {"trap": "noisy_rambling", "query": "random thoughts before bed: grocery list, need to call the dentist, oh also i finally got some real hope about the job search today which felt nice for once, ok going to sleep now", "relevant_ids": ["jobhunt_good1"]}
   ]
 }

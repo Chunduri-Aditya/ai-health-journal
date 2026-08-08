@@ -12,7 +12,7 @@ VENV := venv
 # .runtime/ is gitignored. Nothing here is precious; delete it any time.
 EVAL_CHROMA_DIR := .runtime/chroma-eval
 
-.PHONY: setup setup-full setup-dev run test test-integration test-conversation verify verify-rag rag-eval crisis-eval reframe-eval scenario-run eval-smoke eval-smoke-retrieval report demo clean deps-check distill-behavior
+.PHONY: setup setup-full setup-dev run test test-integration test-conversation verify verify-rag rag-eval crisis-eval reframe-eval ingest-reference scenario-run eval-smoke eval-smoke-retrieval report demo clean deps-check distill-behavior
 
 setup:
 	$(PY) -m venv $(VENV)
@@ -58,6 +58,14 @@ crisis-eval:
 reframe-eval:
 	. $(VENV)/bin/activate && \
 	  PYTHONPATH=. $(PY) evals/reframe_quality_eval.py
+
+# Ingests OpenStax Psychology 2e (CC BY-NC-SA 4.0) into the reference corpus
+# namespace. Requires RETRIEVAL_ENABLED=true and REFERENCE_CORPUS_ENABLED=true
+# to actually be used by /analyze afterward. Cached fetches and the corpus
+# itself live under .runtime/ and storage/, both gitignored -- never committed.
+ingest-reference:
+	. $(VENV)/bin/activate && \
+	  PYTHONPATH=. $(PY) scripts/ingest_reference_corpus.py
 
 rag-eval:
 	. $(VENV)/bin/activate && \

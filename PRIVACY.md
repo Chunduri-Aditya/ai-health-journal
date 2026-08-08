@@ -16,7 +16,7 @@ transmitted off-host under the default and recommended configuration.
 journal entry
   -> Flask /analyze (in-process, localhost)
   -> Ollama at localhost:11434            (analysis; local inference)
-  -> local embedder (ONNX MiniLM, on-CPU) (embeddings; no network)
+  -> local embedder (nomic-embed-text via Ollama, or ONNX MiniLM)  (embeddings; no network)
   -> Chroma PersistentClient ./storage/chroma  (index; local disk)
 ```
 
@@ -71,6 +71,25 @@ Does **not** guarantee:
 - Offline-on-first-run: model weights (Chroma embedder ~80MB, Whisper) download
   once from a public CDN. Pre-cache them for a fully air-gapped run. These are
   model weights inbound, never journal data outbound.
+
+## The reference corpus is the one exception to "zero outbound calls"
+
+`scripts/ingest_reference_corpus.py` (a manual, one-time admin script, not part
+of the running app's request path) fetches OpenStax *Psychology 2e* pages from
+`openstax.org` over HTTPS. This is the only thing in this repository that talks
+to a host other than Ollama at `localhost:11434`, and it is worth being exact
+about rather than folding into the "no external calls" claim above:
+
+- **Inbound only.** The script downloads public textbook pages; it never sends
+  journal content, entries, or anything else about the user to `openstax.org`.
+- **Off by default, and gated separately from the fetch.**
+  `REFERENCE_CORPUS_ENABLED=false` by default controls whether `/analyze` *uses*
+  the corpus. The fetch itself only happens when the script is run by hand.
+- **Cached and gitignored.** Fetched pages are cached in
+  `.runtime/reference_corpus/` so re-running the script doesn't re-hit the
+  network, and that directory, like the resulting Chroma collection, is never
+  committed (see `docs/CLINICAL_DESIGN.md` §7 for the license terms this
+  enforces).
 
 ## How to verify
 

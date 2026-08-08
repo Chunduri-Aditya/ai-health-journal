@@ -121,3 +121,53 @@ def test_distress_language_scores_negative(text):
     entry in the user's cheerful ones.
     """
     assert valence.classify(text) == "negative"
+
+
+class TestGratitudeCoverage:
+    """Regression guard for a gap found by independent validation.
+
+    evals/valence_external_validation.py (scored against GoEmotions, a
+    third-party human-annotated dataset) found "Thank you for asking
+    questions..." and "100%! Congrats on your job too!" both scoring neutral --
+    the lexicon had "thankful"/"thanks" but not the bare word "thank", and no
+    congratulations word at all. Fixed as general lexicon coverage, not by
+    matching those two sentences; these tests check the general words, not the
+    exact failing text.
+    """
+
+    def test_bare_thank_scores_positive(self):
+        assert valence.classify("Thank you so much for the help") == "positive"
+
+    def test_congrats_scores_positive(self):
+        assert valence.classify("Congrats on the new job!") == "positive"
+
+    def test_congratulations_scores_positive(self):
+        assert valence.classify("Congratulations, that's wonderful news") == "positive"
+
+
+class TestEmoticons:
+    """Regression guard for the second gap found by the same validation run.
+
+    "I'm really sorry about your situation :(" scored positive: the tokenizer
+    (`_TOKEN = re.compile(r"[a-z']+")`) strips emoticons before scoring ever
+    sees them, so a clear, visible sentiment signal was invisible by
+    construction.
+    """
+
+    def test_negative_emoticon_flips_a_neutral_sentence(self):
+        assert valence.classify("That was rough today :(") == "negative"
+
+    def test_positive_emoticon_flips_a_neutral_sentence(self):
+        assert valence.classify("That was great today :)") == "positive"
+
+    def test_emoticon_with_trailing_punctuation_still_matches(self):
+        """The boundary regex must not require whitespace immediately after."""
+        assert valence.classify("So relieved it's over :).") == "positive"
+
+    def test_doubled_emoticon_for_emphasis_still_matches(self):
+        assert valence.classify("Everyone left :((") == "negative"
+
+    def test_code_like_text_does_not_false_positive(self):
+        """'):' and '():' patterns show up in code and list markers, not sadness."""
+        assert valence.classify("def foo(): return") == "neutral"
+        assert valence.classify("a) option one b) option two") == "neutral"
