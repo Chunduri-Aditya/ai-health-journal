@@ -1,22 +1,23 @@
 # Journal Agent — Agentic RAG Service
 
-**Deployable agentic RAG over a personal journal:** LangGraph tools, pgvector retrieval, FastAPI streaming, and dual LLM providers (Ollama / Anthropic). Evolved from a privacy-first local journaling assistant.
+**Deployable agentic RAG over a personal journal:** LangGraph tools, pgvector retrieval, FastAPI streaming, and multi-backend LLMs (Ollama / Anthropic / OpenAI-compatible such as Groq). Evolved from a privacy-first local journaling assistant.
 
 ## Showcase (resume-ready)
 
 - Built a LangGraph agent with conditional routing across retrieval, structured metadata lookup, and a confirmation-gated write action, creating an explicit approval boundary before any store mutation.
 - Implemented a pgvector-backed ingestion and retrieval path over Postgres with configurable chunking, embedding, and HNSW index settings exposed through config.
 - Built a FastAPI service layer exposing health, readiness, ingestion, invoke, and streaming endpoints, with durable session handling and required API key protection outside local `ENV=dev`.
-- Abstracted the model provider so the same agent graph runs against local Ollama or the hosted Anthropic API without changes to the graph, and containerized the service with Docker.
+- Abstracted the model provider so the same agent graph runs against local Ollama, Anthropic, or an OpenAI-compatible host (e.g. Groq) without changes to the graph, and containerized the service with Docker.
 - Added regression tests covering agent write behavior after finding a failure where a disabled store reported an uncommitted write as applied.
+- Wired `./start.sh` to free the listen port, boot the app, and fail closed if a startup smoke of Reflect (`POST /analyze`) or the FastAPI agent path does not pass.
 
 ## TL;DR
 
-`./start.sh --service` runs the **product** FastAPI Journal Agent on `:8080` (single-tenant; API key required outside `ENV=dev`). `./start.sh` launches the **Flask lab UI** on `:5000` (local reference, privacy-first). Optional cloud vector store and hosted LLMs are gated and off by default. See [docs/JOURNAL_AGENT.md](docs/JOURNAL_AGENT.md).
+`./start.sh --service` runs the **product** FastAPI Journal Agent on `:8080` (single-tenant; API key required outside `ENV=dev`). `./start.sh` launches the **Flask lab UI** on `:5050` (local notebook UI; avoids macOS AirPlay on `:5000`). Optional cloud vector store and hosted LLMs are gated and off by default. See [docs/JOURNAL_AGENT.md](docs/JOURNAL_AGENT.md) and [docs/DEPLOY.md](docs/DEPLOY.md).
 
-**Quick links:** [Journal Agent](docs/JOURNAL_AGENT.md) | [Measured results](#measured-results) | [Quickstart](#quickstart) | [Clinical design](docs/CLINICAL_DESIGN.md) | [Architecture](#architecture) | [Privacy & Security](#privacy--security)
+**Quick links:** [Journal Agent](docs/JOURNAL_AGENT.md) | [Deploy](docs/DEPLOY.md) | [Measured results](#measured-results) | [Quickstart](#quickstart) | [Clinical design](docs/CLINICAL_DESIGN.md) | [Architecture](#architecture) | [Privacy & Security](#privacy--security)
 
-**Design docs:** [Journal Agent](docs/JOURNAL_AGENT.md) · [Clinical Design](docs/CLINICAL_DESIGN.md) · [Improvements Log](docs/IMPROVEMENTS.md) · [Privacy](PRIVACY.md) · [Upgrade Roadmap](docs/upgrades/README.md)
+**Design docs:** [Journal Agent](docs/JOURNAL_AGENT.md) · [Deploy](docs/DEPLOY.md) · [Clinical Design](docs/CLINICAL_DESIGN.md) · [Improvements Log](docs/IMPROVEMENTS.md) · [Privacy](PRIVACY.md) · [Upgrade Roadmap](docs/upgrades/README.md)
 
 ---
 
@@ -220,13 +221,14 @@ python3 -c "import chromadb; print('chromadb ok')" || echo "⚠️  chromadb mis
 ```bash
 git clone https://github.com/Chunduri-Aditya/ai-health-journal.git
 cd ai-health-journal
-./start.sh             # core install, verifies Ollama, launches on :5000
+./start.sh             # core install, verifies Ollama, smokes Reflect, launches on :5050
 # or
+./start.sh --service   # FastAPI Journal Agent on :8080 (+ service smoke)
 ./start.sh --full      # also install optional deps (Chroma, Pinecone, Whisper)
 ./start.sh --check     # preflight only — don't launch
 ```
 
-`./start.sh` verifies Python, the Ollama binary, and the Ollama daemon (starting it if needed), offers to pull `gemma3:4b` if you have no chat models installed, creates `venv/` on first run, reinstalls dependencies only when the requirements file changes, and copies `.env.example → .env` if you don't have one. Re-runs are fast.
+`./start.sh` verifies Python, the Ollama binary, and the Ollama daemon (starting it if needed), offers to pull `gemma3:4b` if you have no chat models installed, creates `venv/` on first run, reinstalls dependencies only when the requirements file changes, and copies `.env.example → .env` if you don't have one. After bind, it always runs a **startup smoke** (`POST /analyze` for Flask, or `scripts/smoke_service.py` for `--service`) and exits if Reflect/API is broken (for example a rejected Groq key). Re-runs are fast.
 
 **Option 1: Using Makefile**
 
@@ -332,28 +334,32 @@ payloads, or RAG metadata.  Run `grep -r ANTHROPIC_API_KEY .` (excluding `.env`)
 
 ```bash
 # Ensure Ollama is running: ollama serve
-python app.py
+# Prefer the launcher (includes Reflect smoke):
+./start.sh --no-install
+
+# Or run the package module directly:
+python -m src.app
 ```
 
-Visit `http://127.0.0.1:5000/` in your browser.
+Visit `http://127.0.0.1:5050/` in your browser.
 
 **Alternative: Using Makefile**
 
 ```bash
-make run  # Activates venv and runs app.py
+make run  # Activates venv and runs python -m src.app
 ```
 
 **UI Features:**
-- **Model Selector**: Choose from locally installed Ollama chat models, with the recommended balanced model preselected when available
-- **Quality Mode Toggle**: Enable Draft → Verify → Revise pipeline for higher accuracy
-- **Fast Mode** (Quality Mode OFF): Single-model generation (backward compatible)
-- **Machine-Aware Balanced Preset**: When model env vars are omitted, the app recommends and uses a balanced local model stack based on machine RAM and installed Ollama models
+- **Notebook layout**: rail + writing sheet (Apple-like quiet writing space)
+- **Quality pipeline**: Draft → Verify → Revise when quality mode is on
+- **Machine-aware local models**: balanced Ollama stack from installed models when cloud LLM is off
+- **Optional cloud chat**: Groq / OpenRouter via `LLM_BACKEND=openai_compatible` (requires `ALLOW_CLOUD_LLM=true` and a valid key)
 
 ### Screenshots / Demo
 
-![AI Health Journal Interface](docs/screenshot.png)
+![Journal Agent notebook UI](docs/screenshot.png)
 
-*The journaling interface showing dark mode, model selector, quality mode toggle with info tooltip, AI-generated insights, and action buttons. The interface provides a clean, modern design for privacy-first journaling with local LLM analysis.*
+*Flask lab UI on `:5050`: quiet writing sheet, recent entries rail, and a Reflection panel after Draft → Verify → Refine (emotions, suggestions, grounded quotes).*
 
 ---
 
@@ -406,17 +412,20 @@ A successful re-evaluation should show:
 ## Repo Entry Points
 
 ### Core Application
-- `app.py` - Main Flask app, defines `baseline_json` and `quality` modes
-- `config.py` - Configuration management (environment variables)
-- `llm_client.py` - LLM wrapper with temperature/model support
-- `generator_prompts.py` - Draft generation prompts
-- `verifier_prompts.py` - Verification prompts
-- `version.py` - Version information
-- `vector_store/` - Unified retrieval surface (the only one the app uses)
+- `src/app.py` - Flask lab UI; `baseline_json` and `quality` modes
+- `src/config.py` - Configuration management (environment variables + cloud gates)
+- `src/llm_client.py` - Ollama client (`OLLAMA_BASE_URL` overridable)
+- `src/generator_prompts.py` - Draft generation prompts
+- `src/verifier_prompts.py` - Verification prompts
+- `src/service/main.py` - FastAPI Journal Agent (deployed product)
+- `src/agent/` - LangGraph retrieve / metadata / gated-write agent
+- `src/providers/` - Ollama / Anthropic / OpenAI-compatible factories
+- `src/vector_store/` - Unified retrieval surface (the only one the app uses)
   - `base.py` - `VectorStore` ABC, `RetrievalHit` dataclass, `format_hits_as_context` helper
   - `factory.py` - Builds the concrete store from `RETRIEVAL_ENABLED` + `VECTOR_BACKEND`
   - `noop_store.py` - Silent no-op backend when retrieval is disabled
   - `chroma_store.py` - Local Chroma, per-namespace collections, persists at `./storage/chroma/`
+  - `pgvector_store.py` - Postgres + pgvector for the deployed service
   - `pinecone_store.py` - Pinecone cloud, per-call `namespace=` support
 
 ### Evaluation Pipeline
@@ -565,16 +574,18 @@ export PINECONE_API_KEY=your-api-key-here
 
 **Fix:**
 ```bash
-# Find process using port 5000
-lsof -i :5000
+# Find process using port 5050 (default lab UI; :5000 is often AirPlay on macOS)
+lsof -i :5050
 
 # Kill the process (replace PID with actual process ID)
-kill -9 PID
+kill PID
 
 # Or use a different port
-export FLASK_RUN_PORT=5001
-python app.py
+export FLASK_PORT=5051
+python -m src.app
 ```
+
+`./start.sh` frees the target port before bind so duplicate listeners do not silently steal Reflect traffic.
 
 ### Session Not Persisting
 
@@ -583,7 +594,7 @@ python app.py
 **Fix:**
 - Ensure cookies are enabled in your browser
 - Check browser console for errors
-- Verify Flask secret key is set (app.py generates one automatically)
+- Verify Flask secret key is set (`src/app.py` generates one automatically; pin `SECRET_KEY` in `.env` for stability)
 
 ---
 
@@ -696,7 +707,7 @@ You should be able to swap the underlying model without changing:
 
 ### Where to Swap Models
 
-Look for these in `llm_client.py` / `app.py`:
+Look for these in `src/llm_client.py` / `src/app.py`:
 - `MODEL_NAME`
 - `model=...`
 - `base_url=...` (if using local inference)
@@ -789,18 +800,11 @@ You want a minimal, clean folder that:
 ### A) What to KEEP (Minimal Core)
 
 **Code:**
-- `app.py`
-- `config.py`
-- `llm_client.py`
-- `generator_prompts.py`
-- `verifier_prompts.py`
-- `version.py`
-- `vector_store/` (unified retrieval surface — Chroma / Pinecone / noop)
-- `schemas/` (data schemas)
-- `behavior/` (behavior patterns and rules)
-- `privacy/` (privacy features)
-- `scripts/` (utility scripts)
+- `src/` (Flask UI, FastAPI service, providers, agent, vector_store, safety, schemas, privacy, behavior, web)
+- `scripts/` (utility + smoke scripts)
 - `tools/` (development tools)
+- `evals/` (evaluation harness)
+- `start.sh`, `Makefile`, `requirements-*.txt`, `README.md`, `LICENSE`
 - `evals/run_evals.py`
 - `evals/build_dpo_dataset.py`
 - `evals/debug_pair_deltas.py`
@@ -842,42 +846,27 @@ mkdir -p clean_export
 
 # Copy only the essentials
 rsync -av --prune-empty-dirs \
-  --include "app.py" \
-  --include "config.py" \
-  --include "llm_client.py" \
-  --include "generator_prompts.py" \
-  --include "verifier_prompts.py" \
-  --include "version.py" \
-  --include "vector_store/" \
-  --include "schemas/" \
-  --include "chains/" \
-  --include "behavior/" \
-  --include "privacy/" \
+  --include "src/" \
+  --include "src/**" \
   --include "scripts/" \
+  --include "scripts/**" \
   --include "tools/" \
+  --include "tools/**" \
+  --include "evals/" \
+  --include "evals/**" \
+  --include "train/" \
+  --include "train/**" \
+  --include "docs/" \
+  --include "docs/**" \
+  --include "start.sh" \
   --include "README.md" \
   --include "LICENSE" \
   --include ".gitignore" \
   --include "requirements-core.txt" \
+  --include "requirements-service.txt" \
   --include "requirements-optional.txt" \
   --include "Makefile" \
-  --include "evals/" \
-  --include "evals/run_evals.py" \
-  --include "evals/build_dpo_dataset.py" \
-  --include "evals/debug_pair_deltas.py" \
-  --include "evals/compare_before_after.py" \
-  --include "evals/summarize_results.py" \
-  --include "evals/quick_tests.jsonl" \
-  --include "evals/dataset.jsonl" \
-  --include "evals/hard_negatives_hn_v2.jsonl" \
-  --include "evals/results/***" \
-  --include "train/" \
-  --include "train/train_dpo.py" \
-  --include "train/requirements.txt" \
-  --include "train/dpo_pairs_*.jsonl" \
-  --include "templates/" \
-  --include "static/" \
-  --include "tools/" \
+  --include "FILE_MAPPING.md" \
   --exclude "*" \
   ./ clean_export/
 ```
@@ -1001,14 +990,14 @@ python evals/build_dpo_dataset.py --baseline_json "$BASE_JSON" --quality "$QUAL"
 
 ```mermaid
 flowchart LR
-    UI[Browser UI<br/>index.html + Vanilla JS] -->|POST /analyze| API[Flask app.py<br/>Routes + Session]
+    UI[Browser UI<br/>src/web templates + Vanilla JS] -->|POST /analyze| API[Flask src/app.py<br/>Routes + Session]
     UI -->|POST /prompt| API
     UI -->|GET /session/history| API
     UI -->|POST /session/reset| API
-    API -->|POST http://localhost:11434/api/generate| OLLAMA[Ollama Local LLM<br/>phi3:3.8b / samantha-mistral:7b]
+    API -->|POST OLLAMA_BASE_URL/api/generate| OLLAMA[Ollama Local LLM<br/>or cloud openai_compatible / anthropic]
     API --> SESS[Flask Session<br/>session['chat'] array]
     API -->|Quality Mode| QUALITY[Draft → Verify → Revise<br/>Multi-Model Pipeline]
-    API -->|RAG Enabled| RAG[Chroma Vector Store<br/>Local Context Retrieval]
+    API -->|RAG Enabled| RAG[Chroma / pgvector<br/>Local or managed retrieval]
     
     style UI fill:#e1f5ff
     style API fill:#fff4e1
@@ -1100,59 +1089,36 @@ python scripts/benchmark.py
 
 ```
 ai-health-journal/
-├── app.py                 # Main Flask application
-├── config.py             # Configuration management
-├── llm_client.py          # Ollama client wrapper
-├── generator_prompts.py   # Draft generation prompts
-├── verifier_prompts.py    # Verification prompts
-├── version.py             # Version information
-├── schemas/               # Data schemas
-│   └── analysis.py        # Analysis schema definitions
-├── privacy/               # Privacy features
-│   ├── local_text_cache.py # Local text caching
-│   └── redact.py          # Text redaction
-├── behavior/              # Behavior patterns
-│   ├── loader.py          # Pattern loader
-│   ├── rules.json         # Behavior rules
-│   ├── failure_patterns.json # Failure patterns
-│   └── few_shot.jsonl     # Few-shot examples
-├── vector_store/          # Unified retrieval surface
-│   ├── base.py            # VectorStore ABC + RetrievalHit dataclass
-│   ├── factory.py         # Returns the configured backend (or noop)
-│   ├── noop_store.py      # Silent no-op backend
-│   ├── chroma_store.py    # Local Chroma (./storage/chroma/)
-│   └── pinecone_store.py  # Pinecone cloud
-├── evals/                 # Evaluation pipeline
-│   ├── run_evals.py       # Run evaluations
-│   ├── build_dpo_dataset.py  # Build DPO pairs
-│   ├── debug_pair_deltas.py # Debug deltas
-│   ├── compare_before_after.py # Compare results
-│   ├── summarize_results.py  # Summarize results
-│   ├── quick_tests.jsonl  # Quick test dataset
-│   ├── dataset.jsonl      # Standard dataset
-│   ├── hard_negatives.jsonl # Hard negatives dataset
-│   ├── hard_negatives_hn_v2.jsonl  # Hard negatives v2 (recommended)
-│   └── hard_negatives_hn_v3.jsonl  # Hard negatives v3
-├── train/                 # DPO training
-│   ├── train_dpo.py       # Training script
-│   ├── requirements.txt   # Training dependencies
-│   ├── dpo_pairs_*.jsonl  # Generated pairs
-│   └── dpo_pairs_*.sample.jsonl  # Sample subsets
-├── scripts/               # Utility scripts
-│   └── benchmark.py       # Performance benchmarks
-├── tools/                 # Development tools
-│   ├── demo_run.sh        # Demo script for testing endpoints
-│   ├── distill_evals_to_behavior.py # Behavior distillation
-│   ├── pinecone_bootstrap.py # Pinecone index setup utility
-│   └── set_model_env.sh   # Model environment setup
-├── templates/             # HTML templates
-│   └── index.html         # Main UI
-├── static/                # Static assets
-│   └── style.css          # Stylesheet
-├── requirements-core.txt  # Core dependencies
-├── requirements-optional.txt # Optional dependencies
-└── Makefile               # Build automation
+├── src/                      # Application package
+│   ├── app.py                # Flask lab UI (notebook)
+│   ├── config.py             # Settings / env gates
+│   ├── llm_client.py         # Ollama client (+ OLLAMA_BASE_URL)
+│   ├── generator_prompts.py  # Draft prompts
+│   ├── verifier_prompts.py   # Verify / revise prompts
+│   ├── agent/                # LangGraph journal agent
+│   ├── providers/            # Ollama / Anthropic / OpenAI-compatible
+│   ├── safety/               # Crisis floor, tone, grounding
+│   ├── service/              # FastAPI Journal Agent (deployed product)
+│   ├── vector_store/         # chroma / pgvector / pinecone / noop
+│   ├── privacy/              # Redaction + local text cache
+│   ├── schemas/              # Analysis / verifier schemas
+│   ├── behavior/             # Behavior rules + few-shots
+│   └── web/                  # templates/ + static/
+├── evals/                    # Offline + live evaluation harness
+├── scripts/                  # start helpers, smoke_flask, smoke_service, …
+├── tests/                    # Unit / adversarial / contract tests
+├── docs/                     # Design + screenshot.png
+├── start.sh                  # One-shot launcher + startup smoke
+├── Dockerfile.service        # FastAPI container (uvicorn src.service.main:app)
+├── docker-compose.yml        # Local pgvector + API (host Ollama via OLLAMA_BASE_URL)
+├── fly.toml                  # Fly.io defaults (cloud gates for deploy profile)
+├── requirements-core.txt
+├── requirements-service.txt
+├── requirements-optional.txt
+└── Makefile
 ```
+
+See [FILE_MAPPING.md](FILE_MAPPING.md) for the before/after path map after the `src/` reorganization.
 
 ---
 
