@@ -1,4 +1,4 @@
-# AI Health Journal — Project Overview
+# Journal Agent — Project Overview
 
 > Single-document context dump of the repo as of the upgrade-planning checkpoint.
 > This is a current-state snapshot, not a target-state architecture spec.

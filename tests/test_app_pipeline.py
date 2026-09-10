@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 import pytest
 
 import app as app_module
-import llm_client
+import src.llm_client as llm_client
 
 
 def _queue_responses(monkeypatch, responses: List[str]) -> None:

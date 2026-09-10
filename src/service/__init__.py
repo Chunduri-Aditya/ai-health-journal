@@ -1,0 +1,2 @@
+"""FastAPI Journal Agent service.
+"""

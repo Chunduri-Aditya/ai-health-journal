@@ -1,0 +1,65 @@
+name: journal-agent-ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          pip install -U pip
+          pip install -r requirements-service.txt -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check agent service vector_store providers config.py
+      - name: Unit tests (full default suite)
+        env:
+          ENV: test
+          RETRIEVAL_ENABLED: "false"
+          VECTOR_BACKEND: none
+          LLM_BACKEND: ollama
+          ALLOW_CLOUD_LLM: "false"
+          ALLOW_HASH_EMBEDDER: "true"
+        run: pytest -q
+      - name: pip-audit
+        # chromadb may lack a fix version — report but do not hard-fail until
+        # an upstream fixed release is available (documented waiver).
+        continue-on-error: true
+        run: pip-audit -r requirements-core.txt -r requirements-service.txt
+
+  live-eval:
+    # Points Agent Shield / retrieval evals at a deployed URL.
+    # Requires secrets: JOURNAL_AGENT_URL, and optionally AGENT_SHIELD path.
+    # Fails the job when ASR regresses or precision drops below threshold.
+    if: ${{ vars.JOURNAL_AGENT_URL != '' }}
+    runs-on: ubuntu-latest
+    needs: unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements-service.txt requests
+      - name: Health check live deployment
+        env:
+          JOURNAL_AGENT_URL: ${{ vars.JOURNAL_AGENT_URL }}
+        run: |
+          curl -fsS "$JOURNAL_AGENT_URL/readyz" | tee /tmp/ready.json
+          python -c "import json; d=json.load(open('/tmp/ready.json')); assert d.get('status') == 'ready'"
+      - name: Retrieval + injection smoke against live agent
+        env:
+          JOURNAL_AGENT_URL: ${{ vars.JOURNAL_AGENT_URL }}
+          ASR_MAX: "0.25"
+          PRECISION_MIN: "0.5"
+        run: python scripts/live_agent_eval.py

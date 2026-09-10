@@ -116,3 +116,15 @@ distill-behavior:
 clean:
 	rm -rf $(VENV) __pycache__ */__pycache__ .pytest_cache artifacts/ $(EVAL_CHROMA_DIR)
 
+# ── Journal Agent service ─────────────────────────────────────────
+service-install:
+	. $(VENV)/bin/activate && pip install -r requirements-service.txt -r requirements-dev.txt
+
+service-run:
+	. $(VENV)/bin/activate && uvicorn service.main:app --host 0.0.0.0 --port 8080 --reload
+
+service-test:
+	. $(VENV)/bin/activate && pytest -q tests/test_chunking.py tests/test_embedders.py tests/test_agent_routing.py tests/test_agent_respond.py tests/test_service_health.py tests/test_service_agent.py
+
+compose-up:
+	docker compose up --build

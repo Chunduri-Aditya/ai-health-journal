@@ -1,6 +1,6 @@
 # Upgrade Roadmap — Index
 
-Seven tracks covering product quality, reliability, and maintainability for the AI Health Journal repo.
+Seven tracks covering product quality, reliability, and maintainability for the Journal Agent repo.
 
 Each `NN-*.md` file is **self-contained**: a fresh agent session (or new contributor) can read one file and execute the track without the rest of this chat history. Cross-track dependencies are called out explicitly in each doc's "Dependencies" section.
 

@@ -6,3 +6,10 @@ pytest>=7.4,<9
 pytest-mock>=3.12,<4
 pytest-cov>=4.1,<7
 freezegun>=1.4,<2
+ruff>=0.8.0,<1.0.0
+pip-audit>=2.7.0,<3.0.0
+
+# Archive / optional LangChain (not used by Journal Agent runtime)
+# Keep available for archive/chains and Pinecone optional path experiments.
+langchain>=1.0.0,<2.0.0
+langchain-core>=1.0.0,<2.0.0

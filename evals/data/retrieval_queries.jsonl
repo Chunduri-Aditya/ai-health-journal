@@ -1,0 +1,2 @@
+{"query": "sleep and restlessness", "relevant_ids": ["e1"], "corpus": [{"id": "e1", "text": "I slept poorly and felt restless until dawn."}, {"id": "e2", "text": "Had a calm walk and finished a book."}]}
+{"query": "calm walk", "relevant_ids": ["e2"], "corpus": [{"id": "e1", "text": "I slept poorly and felt restless until dawn."}, {"id": "e2", "text": "Had a calm walk and finished a book."}]}

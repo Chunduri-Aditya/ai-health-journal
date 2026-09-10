@@ -17,10 +17,10 @@ import requests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
-from config import load_config
-from llm_client import json_generate
-from generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
-from verifier_prompts import VERIFIER_SYSTEM_PROMPT, get_verifier_prompt
+from src.config import load_config
+from src.llm_client import json_generate
+from src.generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
+from src.verifier_prompts import VERIFIER_SYSTEM_PROMPT, get_verifier_prompt
 
 cfg = load_config()
 

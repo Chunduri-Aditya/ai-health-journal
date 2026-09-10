@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements-core.txt requirements-service.txt ./
+RUN pip install --no-cache-dir -r requirements-service.txt \
+    && pip install --no-cache-dir anthropic
+
+COPY . .
+
+ENV PORT=8080
+EXPOSE 8080
+
+# Health: /healthz — Fly/Railway/Render/App Runner probes
+CMD ["uvicorn", "service.main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -8,13 +8,12 @@ document confirmed gaps so a future fix is caught here rather than silently.
 
 import base64
 import zlib
-from dataclasses import replace
 from unittest import mock
 
 import pytest
 
 import app
-from config import load_config
+from src.config import load_config
 from privacy.redact import redact
 
 
@@ -44,7 +43,9 @@ class TestCloudGatesFailClosed:
         from providers.factory import get_llm_provider
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-CANARY-SHOULD-NEVER-BE-READ")
-        cfg = replace(load_config(), llm_backend="ollama", allow_cloud_llm=False)
+        cfg = load_config().model_copy(
+            update={"llm_backend": "ollama", "allow_cloud_llm": False},
+                    )
 
         calls = []
         real_get = __import__("os").environ.get
@@ -64,7 +65,9 @@ class TestCloudGatesFailClosed:
         from providers.factory import get_llm_provider
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-CANARY-SHOULD-NEVER-BE-READ")
-        cfg = replace(load_config(), llm_backend="anthropic", allow_cloud_llm=False)
+        cfg = load_config().model_copy(
+            update={"llm_backend": "anthropic", "allow_cloud_llm": False},
+                    )
 
         calls = []
         real_get = __import__("os").environ.get
@@ -83,10 +86,13 @@ class TestCloudGatesFailClosed:
     def test_pinecone_gate_raises_rather_than_silently_connecting(self):
         from vector_store.factory import get_vector_store
 
-        cfg = replace(
-            load_config(), retrieval_enabled=True, vector_backend="pinecone",
-            allow_cloud_vectorstore=False,
-        )
+        cfg = load_config().model_copy(
+            update={
+                "retrieval_enabled": True,
+                "vector_backend": "pinecone",
+                "allow_cloud_vectorstore": False,
+            },
+                    )
         with mock.patch("vector_store.factory.load_config", return_value=cfg):
             with pytest.raises(RuntimeError, match="cloud_vectorstore_not_enabled"):
                 get_vector_store()
@@ -231,7 +237,9 @@ class TestUserNamespaceModeHasNoAuthentication:
         strict=True,
     )
     def test_namespace_requires_more_than_a_guessable_header(self):
-        patched_cfg = replace(app.cfg, rag_namespace_mode="user", rag_user_id_header="X-User-Id")
+        patched_cfg = app.cfg.model_copy(
+            update={"rag_namespace_mode": "user", "rag_user_id_header": "X-User-Id"},
+                    )
         with mock.patch.object(app, "cfg", patched_cfg):
             with app.app.test_request_context(
                 headers={"X-User-Id": "victim-real-identity-8f2a"}
@@ -255,7 +263,9 @@ class TestUserNamespaceModeHasNoAuthentication:
         intentional fallback behavior, not a bypass of an identity check --
         but it means 'anonymous' is a shared, not isolated, namespace.
         """
-        patched_cfg = replace(app.cfg, rag_namespace_mode="user", rag_user_id_header="X-User-Id")
+        patched_cfg = app.cfg.model_copy(
+            update={"rag_namespace_mode": "user", "rag_user_id_header": "X-User-Id"},
+                    )
         with mock.patch.object(app, "cfg", patched_cfg):
             with app.app.test_request_context():
                 client_a = app._namespace_for()

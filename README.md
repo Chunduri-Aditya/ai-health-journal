@@ -1,14 +1,22 @@
-# 🧠 AI Health Journal
+# Journal Agent — Agentic RAG Service
 
-**Privacy-first local LLM journaling assistant using Flask + Ollama. All processing happens on your machine—no data leaves your device.**
+**Deployable agentic RAG over a personal journal:** LangGraph tools, pgvector retrieval, FastAPI streaming, and dual LLM providers (Ollama / Anthropic). Evolved from a privacy-first local journaling assistant.
+
+## Showcase (resume-ready)
+
+- Built a LangGraph agent with conditional routing across retrieval, structured metadata lookup, and a confirmation-gated write action, creating an explicit approval boundary before any store mutation.
+- Implemented a pgvector-backed ingestion and retrieval path over Postgres with configurable chunking, embedding, and HNSW index settings exposed through config.
+- Built a FastAPI service layer exposing health, readiness, ingestion, invoke, and streaming endpoints, with durable session handling and required API key protection outside local `ENV=dev`.
+- Abstracted the model provider so the same agent graph runs against local Ollama or the hosted Anthropic API without changes to the graph, and containerized the service with Docker.
+- Added regression tests covering agent write behavior after finding a failure where a disabled store reported an uncommitted write as applied.
 
 ## TL;DR
 
-A local-only journaling assistant that analyzes your entries using local LLMs (Ollama). Runs fully on localhost by default—no external APIs, no cloud storage. Optional cloud vector store (Pinecone) is gated and off by default. Includes a reproducible DPO fine-tuning pipeline for improving model groundedness.
+`./start.sh --service` runs the **product** FastAPI Journal Agent on `:8080` (single-tenant; API key required outside `ENV=dev`). `./start.sh` launches the **Flask lab UI** on `:5000` (local reference, privacy-first). Optional cloud vector store and hosted LLMs are gated and off by default. See [docs/JOURNAL_AGENT.md](docs/JOURNAL_AGENT.md).
 
-**Quick links:** [Measured results](#measured-results) | [Quickstart](#quickstart) | [Clinical design](docs/CLINICAL_DESIGN.md) | [Architecture](#architecture) | [Common Issues](#common-issues) | [Privacy & Security](#privacy--security)
+**Quick links:** [Journal Agent](docs/JOURNAL_AGENT.md) | [Measured results](#measured-results) | [Quickstart](#quickstart) | [Clinical design](docs/CLINICAL_DESIGN.md) | [Architecture](#architecture) | [Privacy & Security](#privacy--security)
 
-**Design docs:** [Clinical Design](docs/CLINICAL_DESIGN.md) · [Improvements Log](docs/IMPROVEMENTS.md) · [Privacy](PRIVACY.md) · [Upgrade Roadmap](docs/upgrades/README.md)
+**Design docs:** [Journal Agent](docs/JOURNAL_AGENT.md) · [Clinical Design](docs/CLINICAL_DESIGN.md) · [Improvements Log](docs/IMPROVEMENTS.md) · [Privacy](PRIVACY.md) · [Upgrade Roadmap](docs/upgrades/README.md)
 
 ---
 
@@ -148,12 +156,12 @@ embedded on-device and retrieved to ground new reflections. Everything below the
 - **AI-powered insights**: analyze journal entries with local LLMs (Phi-3, Mistral) via Ollama
 - **Multi-model quality pipeline**: Draft → Verify → Revise workflow reduces hallucinations
 - **Therapeutic reflections with a crisis gate**: emotional-intelligence insights, journaling coaching, and a constructive reframe that is suppressed on crisis/self-harm entries in favor of a support message
-- **Session persistence**: history syncs between frontend and Flask session, persists across page refreshes
+- **Session history (Flask lab)**: chat history syncs with the Flask session for local UI experiments (cookie-backed; not the product session store)
 
 **Optional extras (not core to the RAG journal):**
 
 - **Modern UI**: typewriter animations, dark mode, collapsible history sidebar, request cancellation, model selector, quality mode toggle
-- **Voice transcription** (`/transcribe`): local Whisper, optional dependency
+- **Voice transcription (Flask lab, optional)**: `/transcribe` — install optional deps; not part of the FastAPI product surface
 - **Model benchmark lab** (`/benchmark/latest`): compare local models on a patient-case suite
 - **Reference corpus** (`REFERENCE_CORPUS_ENABLED`): a second, separately cited retrieval source — OpenStax *Psychology 2e* (CC BY-NC-SA 4.0) — grounding reflections in general psychology background, always attributed distinctly from your own journal history. Off by default. `make ingest-reference` to build it; see [`docs/CLINICAL_DESIGN.md`](docs/CLINICAL_DESIGN.md#7-the-reference-corpus) for the license terms and citation requirements
 - **DPO fine-tuning pipeline**: build preference datasets and train LoRA adapters to improve groundedness
@@ -293,14 +301,18 @@ LOCAL_CACHE_MAX_ITEMS=2000
 
 # ── LLM Backend (Upgrade 08) ────────────────────────────────────────────────
 # Default: ollama (local). All analysis stays on localhost unless both gates below are open.
-LLM_BACKEND=ollama          # ollama | anthropic
-ALLOW_CLOUD_LLM=false       # Hard gate. Must be true to allow any Anthropic call.
+LLM_BACKEND=ollama          # ollama | anthropic | openai_compatible
+ALLOW_CLOUD_LLM=false       # Hard gate. Must be true to allow any cloud LLM call.
 # ANTHROPIC_API_KEY=sk-ant-... # Required when LLM_BACKEND=anthropic + ALLOW_CLOUD_LLM=true.
                               # Never commit. Never logs into session payloads or RAG metadata.
 # Per-role Anthropic model overrides (optional — defaults below are current at time of writing):
 # ANTHROPIC_GENERATOR_MODEL=claude-sonnet-4-6
 # ANTHROPIC_VERIFIER_MODEL=claude-sonnet-4-6
 # ANTHROPIC_PROMPT_MODEL=claude-haiku-4-5-20251001
+# Free OSS via Groq (or OpenRouter): see docs/DEPLOY.md
+# LLM_BACKEND=openai_compatible
+# OPENAI_COMPATIBLE_BASE_URL=https://api.groq.com/openai/v1
+# OPENAI_COMPATIBLE_API_KEY=gsk-...
 ```
 
 **Cloud LLM gate** mirrors the cloud vector store gate: `ALLOW_CLOUD_LLM=false` (default) means zero

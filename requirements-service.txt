@@ -1,0 +1,28 @@
+# Journal Agent service stack (FastAPI + pgvector + LangGraph + tracing)
+# Install on top of core: pip install -r requirements-core.txt -r requirements-service.txt
+-r requirements-core.txt
+
+# API
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.32.0,<1.0.0
+python-multipart>=0.0.9
+# Starlette comes via FastAPI; prefer fixed advisories when FastAPI bumps allow it.
+starlette>=0.40.0
+
+# Postgres + pgvector
+psycopg[binary]>=3.2.0,<4.0.0
+psycopg_pool>=3.2.0,<4.0.0
+pgvector>=0.3.6,<1.0.0
+
+# Agent orchestration (langgraph only — no unused langchain-* wrappers)
+langgraph>=1.0.0,<2.0.0
+
+# LLM / embeddings used by the service path
+anthropic>=0.40.0,<1.0.0
+openai>=1.109.1,<2.0.0
+
+# Local semantic default for pgvector (matches Chroma MiniLM class of models)
+fastembed>=0.4.0,<1.0.0
+
+# Observability (optional at runtime; gated by LANGFUSE_ENABLED)
+langfuse>=2.0.0,<5.0.0

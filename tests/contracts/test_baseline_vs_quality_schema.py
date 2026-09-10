@@ -23,7 +23,7 @@ from __future__ import annotations
 import inspect
 import re
 
-from generator_prompts import DRAFT_SYSTEM_PROMPT
+from src.generator_prompts import DRAFT_SYSTEM_PROMPT
 from schemas.analysis import AnalysisOutput
 
 

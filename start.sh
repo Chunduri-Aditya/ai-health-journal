@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
-# AI Health Journal — one-shot launcher
+# Journal Agent — one-shot launcher
 #
 # Usage:
-#   ./start.sh                 core install, start Flask on http://127.0.0.1:5000
+# GateGuard: callers user shell. Affected API: Flask lab URL port (5050 vs AirPlay 5000).
+# Data schemas: none. User: "@terminals/4.txt:79-114"
+#   ./start.sh                 core install, start Flask on http://127.0.0.1:5050
+#   ./start.sh --service       install service deps, start FastAPI on http://127.0.0.1:8080
 #   ./start.sh --full          also install optional deps (Chroma, Pinecone, Whisper)
 #   ./start.sh --no-install    skip dependency install (just preflight + run)
 #   ./start.sh --skip-model    don't prompt to pull a default model
-#   ./start.sh --check         run preflight + setup but DO NOT launch Flask
+#   ./start.sh --check         run preflight + setup but DO NOT launch the app
 #   ./start.sh --help
 #
 # Behavior:
@@ -17,7 +20,7 @@
 #   2. Creates ./venv/ on first run, reinstalls deps only when the
 #      requirements files change.
 #   3. Writes a template .env on first run (never overwrites).
-#   4. Launches app.py in the foreground. Ctrl+C stops cleanly.
+#   4. Launches Flask (default) or FastAPI (--service). Ctrl+C stops cleanly.
 # ─────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -29,16 +32,19 @@ cd "$SCRIPT_DIR"
 VENV_DIR="venv"
 REQS_CORE="requirements-core.txt"
 REQS_OPT="requirements-optional.txt"
+REQS_SERVICE="requirements-service.txt"
 ENV_FILE=".env"
 
 # ── Flags ────────────────────────────────────────────────────────────────────
 INSTALL_FULL=0
+RUN_SERVICE=0
 SKIP_INSTALL=0
 SKIP_MODEL_PROMPT=0
 CHECK_ONLY=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --service)     RUN_SERVICE=1 ;;
     --full)        INSTALL_FULL=1 ;;
     --no-install)  SKIP_INSTALL=1 ;;
     --skip-model)  SKIP_MODEL_PROMPT=1 ;;
@@ -117,34 +123,46 @@ ${C_ERR}✗${C_OFF} Ollama is not installed.
     Linux:  curl -fsSL https://ollama.com/install.sh | sh
     Then re-run: ./start.sh
 EOF
-  exit 1
+  if [ "$RUN_SERVICE" -eq 0 ]; then
+    exit 1
+  fi
+  warn "Ollama missing. Service mode can still run with hosted providers."
+else
+  ok "Ollama CLI: $(ollama --version 2>/dev/null | head -1 || echo present)"
 fi
-ok "Ollama CLI: $(ollama --version 2>/dev/null | head -1 || echo present)"
 
 # ── 3. Ollama daemon ─────────────────────────────────────────────────────────
 ollama_up() { curl -fsS --max-time 2 http://localhost:11434/api/tags >/dev/null 2>&1; }
 
-if ollama_up; then
-  ok "Ollama daemon is reachable on :11434"
-else
-  warn "Ollama daemon is not running — starting it in the background…"
-  mkdir -p .runtime
-  nohup ollama serve >.runtime/ollama.log 2>&1 &
-  OLLAMA_PID=$!
-  # Wait up to ~15s for the daemon to accept connections.
-  for i in $(seq 1 30); do
-    if ollama_up; then break; fi
-    sleep 0.5
-  done
-  if ! ollama_up; then
-    die "Could not reach Ollama daemon after starting it. See .runtime/ollama.log"
+if command -v ollama >/dev/null 2>&1; then
+  if ollama_up; then
+    ok "Ollama daemon is reachable on :11434"
+  else
+    warn "Ollama daemon is not running — starting it in the background…"
+    mkdir -p .runtime
+    nohup ollama serve >.runtime/ollama.log 2>&1 &
+    OLLAMA_PID=$!
+    # Wait up to ~15s for the daemon to accept connections.
+    for i in $(seq 1 30); do
+      if ollama_up; then break; fi
+      sleep 0.5
+    done
+    if ! ollama_up; then
+      if [ "$RUN_SERVICE" -eq 0 ]; then
+        die "Could not reach Ollama daemon after starting it. See .runtime/ollama.log"
+      fi
+      warn "Could not reach Ollama daemon after starting it. Service mode may still work with hosted providers."
+    else
+      ok "Ollama daemon started (pid ${OLLAMA_PID}, log: .runtime/ollama.log)"
+    fi
   fi
-  ok "Ollama daemon started (pid ${OLLAMA_PID}, log: .runtime/ollama.log)"
 fi
 
 # ── 4. At least one chat model ───────────────────────────────────────────────
-INSTALLED_MODELS_JSON="$(curl -fsS http://localhost:11434/api/tags 2>/dev/null || echo '{}')"
-MODEL_COUNT=$(python3 -c "
+MODEL_COUNT=0
+if ollama_up; then
+  INSTALLED_MODELS_JSON="$(curl -fsS http://localhost:11434/api/tags 2>/dev/null || echo '{}')"
+  MODEL_COUNT=$(python3 -c "
 import json, sys
 try:
     data = json.loads(sys.stdin.read() or '{}')
@@ -153,24 +171,29 @@ try:
 except Exception:
     print(0)
 " <<<"$INSTALLED_MODELS_JSON")
+fi
 
 if [ "$MODEL_COUNT" -eq 0 ]; then
   if [ "$SKIP_MODEL_PROMPT" -eq 1 ]; then
-    warn "No Ollama chat models installed. Pull one before using /analyze (e.g. ollama pull gemma3:4b)."
+    warn "No Ollama chat models installed. Pull one before using /analyze or Ollama-backed service routes (e.g. ollama pull gemma3:4b)."
   else
-    warn "No Ollama chat models installed yet."
-    printf "  Pull a balanced default now? [gemma3:4b, ~3 GB]  [Y/n] "
-    read -r ANSWER || ANSWER=""
-    case "${ANSWER:-Y}" in
-      y|Y|yes|YES|"")
-        say "Pulling gemma3:4b (this may take a few minutes)…"
-        ollama pull gemma3:4b || die "ollama pull failed. Check network / disk space."
-        ok "gemma3:4b ready"
-        ;;
-      *)
-        warn "Skipped. The app will still start, but /analyze will fail until a model is pulled."
-        ;;
-    esac
+    if ! command -v ollama >/dev/null 2>&1 || ! ollama_up; then
+      warn "Skipping model prompt because Ollama is unavailable."
+    else
+      warn "No Ollama chat models installed yet."
+      printf "  Pull a balanced default now? [gemma3:4b, ~3 GB]  [Y/n] "
+      read -r ANSWER || ANSWER=""
+      case "${ANSWER:-Y}" in
+        y|Y|yes|YES|"")
+          say "Pulling gemma3:4b (this may take a few minutes)…"
+          ollama pull gemma3:4b || die "ollama pull failed. Check network / disk space."
+          ok "gemma3:4b ready"
+          ;;
+        *)
+          warn "Skipped. The app will still start, but /analyze will fail until a model is pulled."
+          ;;
+      esac
+    fi
   fi
 else
   ok "Ollama chat models installed: ${MODEL_COUNT}"
@@ -220,6 +243,14 @@ install_if_changed() {
 
 install_if_changed "$REQS_CORE" "core"
 
+if [ "$RUN_SERVICE" -eq 1 ]; then
+  if [ -f "$REQS_SERVICE" ]; then
+    install_if_changed "$REQS_SERVICE" "service"
+  else
+    die "Service mode requested but ${REQS_SERVICE} is missing"
+  fi
+fi
+
 if [ "$INSTALL_FULL" -eq 1 ]; then
   if [ -f "$REQS_OPT" ]; then
     install_if_changed "$REQS_OPT" "optional"
@@ -251,22 +282,43 @@ fi
 
 # ── 8. Launch ────────────────────────────────────────────────────────────────
 section "Launch"
-HOST_URL="http://127.0.0.1:5000"
+# macOS AirPlay Receiver binds *:5000 (Control Center); use 5050 for the lab UI.
+FLASK_PORT="${FLASK_PORT:-5050}"
+export FLASK_PORT
+
+if [ "$RUN_SERVICE" -eq 1 ]; then
+  HOST_URL="http://127.0.0.1:8080"
+else
+  HOST_URL="http://127.0.0.1:${FLASK_PORT}"
+fi
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
-  ok "Preflight complete. --check requested; not launching Flask."
+  ok "Preflight complete. --check requested; not launching the app."
   exit 0
 fi
 
-ok "Starting Flask app — open ${HOST_URL} in your browser"
+if [ "$RUN_SERVICE" -eq 1 ]; then
+  ok "Starting FastAPI service — API at ${HOST_URL} (try ${HOST_URL}/docs or ${HOST_URL}/readyz)"
+  ok "Flask lab UI (optional): ./start.sh  →  http://127.0.0.1:${FLASK_PORT}"
+else
+  ok "Starting Flask app — open ${HOST_URL} in your browser"
+fi
 say "Press Ctrl+C to stop."
 echo
 
 # Keep ourselves in the cleanup trap by NOT using exec when we started the
 # daemon, so the trap can kill it on Ctrl+C.
-if [ -n "$OLLAMA_PID" ]; then
-  "$VENV_PY" app.py
+if [ "$RUN_SERVICE" -eq 1 ]; then
+  if [ -n "$OLLAMA_PID" ]; then
+    "$VENV_DIR/bin/uvicorn" src.service.main:app --host 127.0.0.1 --port 8080
+  else
+    exec "$VENV_DIR/bin/uvicorn" src.service.main:app --host 127.0.0.1 --port 8080
+  fi
 else
-  # Nothing to clean up — exec for a tidier process tree.
-  exec "$VENV_PY" app.py
+  if [ -n "$OLLAMA_PID" ]; then
+    "$VENV_PY" app.py
+  else
+    # Nothing to clean up — exec for a tidier process tree.
+    exec "$VENV_PY" app.py
+  fi
 fi

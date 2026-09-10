@@ -8,9 +8,9 @@ dropdown where a user could pick one directly for analysis.
 
 import pytest
 
-import model_selection
-from config import load_config
-from model_selection import _is_candidate_chat_model, get_runtime_model_selection
+import src.model_selection as model_selection
+from src.config import load_config
+from src.model_selection import _is_candidate_chat_model, get_runtime_model_selection
 
 
 @pytest.mark.parametrize(

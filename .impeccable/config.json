@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "fraunces",
+        "createdAt": "2026-09-10T04:02:31.817Z",
+        "reason": "switched away from Fraunces; ignore leftover if any"
+      }
+    ]
+  }
+}

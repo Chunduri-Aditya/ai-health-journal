@@ -12,8 +12,8 @@ from typing import Callable, List
 
 import pytest
 
-import llm_client
-from llm_client import (
+import src.llm_client as llm_client
+from src.llm_client import (
     _parse_json_lenient,
     _strip_markdown_fences,
     extract_json_substring,

@@ -118,3 +118,38 @@ class InMemoryVectorStore(VectorStore):
 
     def all_ids(self, namespace: Optional[str] = None) -> List[str]:
         return list(self._docs.get(self._ns(namespace), {}).keys())
+
+    def query_entry_metadata(
+        self,
+        *,
+        namespace: str,
+        entry_id: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Query entry metadata (mimics pgvector interface for tests)."""
+        ns = self._ns(namespace)
+        bucket = self._docs.get(ns, {})
+        if entry_id:
+            if entry_id in bucket:
+                text, meta = bucket[entry_id]
+                return [
+                    {
+                        "entry_id": entry_id,
+                        "metadata": meta,
+                        "created_at": meta.get("created_at"),
+                        "preview": text[:200],
+                    }
+                ]
+            return []
+        # Return all entries
+        rows = []
+        for eid, (text, meta) in list(bucket.items())[:limit]:
+            rows.append(
+                {
+                    "entry_id": eid,
+                    "metadata": meta,
+                    "created_at": meta.get("created_at"),
+                    "preview": text[:200],
+                }
+            )
+        return rows
