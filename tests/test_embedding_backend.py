@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from vector_store.embeddings import (
+from src.vector_store.embeddings import (
     DEFAULT_BACKEND_DIMENSION,
     EmbeddingBackendMismatch,
     build_embedding_function,
@@ -90,7 +90,7 @@ class TestMismatchGuard:
     """The guard that makes a backend switch safe rather than corrupting."""
 
     def _store_with_default_entries(self, path):
-        from vector_store.chroma_store import ChromaStore
+        from src.vector_store.chroma_store import ChromaStore
 
         store = ChromaStore(default_namespace="guardtest")
         store.add_entry(entry_id="e1", text="felt anxious about work", namespace="guardtest")
@@ -99,7 +99,7 @@ class TestMismatchGuard:
     def test_switching_embedder_raises_actionable_error(self, monkeypatch):
         pytest.importorskip("chromadb")
 
-        from vector_store.chroma_store import ChromaStore
+        from src.vector_store.chroma_store import ChromaStore
 
         with tempfile.TemporaryDirectory() as tmp:
             monkeypatch.setenv("CHROMA_PERSIST_DIR", tmp)
@@ -125,7 +125,7 @@ class TestMismatchGuard:
         """
         pytest.importorskip("chromadb")
 
-        from vector_store.chroma_store import ChromaStore
+        from src.vector_store.chroma_store import ChromaStore
 
         with tempfile.TemporaryDirectory() as tmp:
             monkeypatch.setenv("CHROMA_PERSIST_DIR", tmp)
@@ -141,7 +141,7 @@ class TestMismatchGuard:
     def test_same_backend_still_works(self, monkeypatch):
         """Regression guard: the default path must be unchanged by all of this."""
         pytest.importorskip("chromadb")
-        from vector_store.chroma_store import ChromaStore
+        from src.vector_store.chroma_store import ChromaStore
 
         with tempfile.TemporaryDirectory() as tmp:
             monkeypatch.setenv("CHROMA_PERSIST_DIR", tmp)

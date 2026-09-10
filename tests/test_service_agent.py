@@ -21,7 +21,7 @@ def memory_store():
 
 @pytest.fixture
 def client_with_memory(memory_store, monkeypatch):
-    import service.main as svc
+    import src.service.main as svc
     from fastapi.testclient import TestClient
 
     monkeypatch.setattr(svc, "_store", memory_store)
@@ -33,9 +33,9 @@ def client_with_memory(memory_store, monkeypatch):
 
 @pytest.fixture
 def client_noop(monkeypatch):
-    import service.main as svc
+    import src.service.main as svc
     from fastapi.testclient import TestClient
-    from vector_store.noop_store import NoOpStore
+    from src.vector_store.noop_store import NoOpStore
 
     monkeypatch.setattr(svc, "_store", NoOpStore())
     with svc._sessions_lock:

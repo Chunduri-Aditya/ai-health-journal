@@ -47,6 +47,8 @@ primary_region = "sjc"
   HNSW_EF_CONSTRUCTION = "64"
   HNSW_EF_SEARCH = "40"
   LLM_BACKEND = "openai_compatible"
+  ALLOW_CLOUD_LLM = "true"
+  ALLOW_CLOUD_VECTORSTORE = "true"
   # GateGuard: callers fly deploy. Affected API: Groq role model env defaults.
   # Data schemas: none. User: Groq org limits (8K TPM).
   OPENAI_COMPATIBLE_BASE_URL = "https://api.groq.com/openai/v1"

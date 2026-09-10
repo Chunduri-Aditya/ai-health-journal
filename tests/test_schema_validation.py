@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from schemas.analysis import AnalysisOutput
-from schemas.verifier import VerifierVerdict
+from src.schemas.analysis import AnalysisOutput
+from src.schemas.verifier import VerifierVerdict
 
 
 class TestAnalysisOutput:

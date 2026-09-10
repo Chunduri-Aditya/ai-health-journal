@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent.respond import generate_grounded_response
-from safety import CRISIS_SUPPORT_MESSAGE
+from src.agent.respond import generate_grounded_response
+from src.safety import CRISIS_SUPPORT_MESSAGE
 
 
 class TestSafetyAgentIntegration:

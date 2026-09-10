@@ -16,7 +16,7 @@ import requests
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app
+from src.app import app
 from src.config import load_config
 from src.llm_client import json_generate
 from src.generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
@@ -187,8 +187,8 @@ def run_evaluation(baseline_mode: bool = False, quality_mode: bool = True, basel
     
     # Check retrieval availability via the unified vector_store surface.
     try:
-        from vector_store.base import format_hits_as_context
-        from vector_store.factory import get_vector_store
+        from src.vector_store.base import format_hits_as_context
+        from src.vector_store.factory import get_vector_store
         _vs = get_vector_store(default_namespace="eval")
         rag_enabled = _vs.enabled
     except Exception:
@@ -517,11 +517,11 @@ def run_claude_evaluation(dataset_path: str) -> Dict[str, Any]:
     validator_model, fewer retries), same as the Ollama baseline.  Otherwise
     pairs starve and DPO training degrades.
     """
-    from config import load_config
-    from providers.factory import get_llm_provider
+    from src.config import load_config
+    from src.providers.factory import get_llm_provider
     from generator_prompts import DRAFT_SYSTEM_PROMPT, get_draft_prompt
     from llm_client import DRAFT_JSON_SCHEMA, VERIFIER_JSON_SCHEMA
-    from schemas.analysis import AnalysisOutput
+    from src.schemas.analysis import AnalysisOutput
 
     cfg = load_config()
 
@@ -635,7 +635,7 @@ def main():
     # file runs as __main__, so a sys.modules lookup for it would miss.
     if args.mock_llm:
         from tests.support.fake_provider import ThemeAwareFakeProvider, fake_json_generate
-        import app as _app_mod
+        import src.app as _app_mod
         _app_mod._provider = ThemeAwareFakeProvider()
         global json_generate
         json_generate = fake_json_generate

@@ -5,7 +5,7 @@ persisted to the local vector store (document text or metadata). Balanced keeps
 raw text. These run with no LLM and no real Chroma — they intercept add_entry.
 """
 
-import app
+import src.app as app
 
 
 class _CaptureStore:

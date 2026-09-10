@@ -178,7 +178,7 @@ def main() -> int:
 
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-    from config import load_config
+    from src.config import load_config
 
     cfg = load_config()
     default_source = os.getenv("CHROMA_PERSIST_DIR", "./storage/chroma")

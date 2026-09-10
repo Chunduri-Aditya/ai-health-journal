@@ -12,4 +12,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Health: /healthz — Fly/Railway/Render/App Runner probes
-CMD ["uvicorn", "service.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "src.service.main:app", "--host", "0.0.0.0", "--port", "8080"]

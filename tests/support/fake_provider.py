@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from providers.base import LLMProvider
+from src.providers.base import LLMProvider
 
 # ── Theme map ──────────────────────────────────────────────────────────────
 # Ordered so the first matching theme wins; each theme is (keywords, emotions,

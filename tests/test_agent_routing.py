@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from agent.confirmation import is_confirmation, is_denial
-from agent.graph import _strip_write_directive, route_intent
-from agent.tools import tool_apply_write, tool_propose_write, tool_retrieve
+from src.agent.confirmation import is_confirmation, is_denial
+from src.agent.graph import _strip_write_directive, route_intent
+from src.agent.tools import tool_apply_write, tool_propose_write, tool_retrieve
 from tests.vector_store.fakes import InMemoryVectorStore
-from vector_store.noop_store import NoOpStore
+from src.vector_store.noop_store import NoOpStore
 
 
 class TestConfirmation:

@@ -25,10 +25,10 @@ import pytest
 
 import src.llm_client as llm_client
 from src.config import load_config
-from providers.factory import BackendMisconfigured, get_llm_provider
-from providers.ollama_provider import OllamaProvider
-from providers.roles import resolve_role_models
-from schemas.analysis import AnalysisOutput
+from src.providers.factory import BackendMisconfigured, get_llm_provider
+from src.providers.ollama_provider import OllamaProvider
+from src.providers.roles import resolve_role_models
+from src.schemas.analysis import AnalysisOutput
 
 
 def _cfg(**overrides):
@@ -60,10 +60,10 @@ class TestProviderGate:
         assert isinstance(provider, OllamaProvider)
 
     def test_anthropic_provider_returned_when_gate_open(self):
-        from providers.anthropic_provider import AnthropicProvider
+        from src.providers.anthropic_provider import AnthropicProvider
         cfg = _cfg(llm_backend="anthropic", allow_cloud_llm=True)
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-fake-key-open-gate"}):
-            with patch("providers.anthropic_provider.AnthropicProvider", AnthropicProvider):
+            with patch("src.providers.anthropic_provider.AnthropicProvider", AnthropicProvider):
                 try:
                     provider = get_llm_provider(cfg)
                     assert isinstance(provider, AnthropicProvider)
@@ -78,7 +78,7 @@ class TestProviderGate:
     def test_anthropic_client_never_instantiated_when_gate_closed(self):
         mock_class = MagicMock()
         cfg = _cfg(llm_backend="anthropic", allow_cloud_llm=False)
-        with patch("providers.anthropic_provider.AnthropicProvider", mock_class):
+        with patch("src.providers.anthropic_provider.AnthropicProvider", mock_class):
             with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-fake"}):
                 provider = get_llm_provider(cfg)
         mock_class.assert_not_called()
@@ -94,7 +94,7 @@ class TestOpenAICompatibleGate:
         )
         mock_class = MagicMock()
         with patch(
-            "providers.openai_compatible_provider.OpenAICompatibleProvider", mock_class
+            "src.providers.openai_compatible_provider.OpenAICompatibleProvider", mock_class
         ):
             with patch.dict(os.environ, {"OPENAI_COMPATIBLE_API_KEY": "gsk-fake"}):
                 provider = get_llm_provider(cfg)
@@ -131,7 +131,7 @@ class TestOpenAICompatibleGate:
         assert isinstance(provider, OllamaProvider)
 
     def test_provider_returned_when_gate_open(self):
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
         cfg = _cfg(
             llm_backend="openai_compatible",
             allow_cloud_llm=True,
@@ -180,8 +180,8 @@ class TestResolveRoleModels:
         monkeypatch.delenv("OPENAI_COMPATIBLE_FALLBACK_MODEL", raising=False)
         monkeypatch.delenv("OPENAI_COMPATIBLE_VERIFIER_MODEL", raising=False)
         monkeypatch.delenv("OPENAI_COMPATIBLE_PROMPT_MODEL", raising=False)
-        from config import Config
-        from providers.roles import resolve_role_models
+        from src.config import Config
+        from src.providers.roles import resolve_role_models
 
         cfg = Config()
         roles = resolve_role_models(cfg)
@@ -245,7 +245,7 @@ class TestAnthropicProviderJsonGenerate:
         return mock_client
 
     def test_valid_payload_passes_pydantic_validation(self, valid_analysis_json):
-        from providers.anthropic_provider import AnthropicProvider
+        from src.providers.anthropic_provider import AnthropicProvider
         provider = AnthropicProvider(api_key="test-key")
         with patch.object(provider, "_client", return_value=self._make_client(valid_analysis_json)):
             result = provider.json_generate(
@@ -258,7 +258,7 @@ class TestAnthropicProviderJsonGenerate:
         assert result["summary"] == valid_analysis_json["summary"]
 
     def test_empty_dict_raises_validation_error(self):
-        from providers.anthropic_provider import AnthropicProvider
+        from src.providers.anthropic_provider import AnthropicProvider
         provider = AnthropicProvider(api_key="test-key")
         with patch.object(provider, "_client", return_value=self._make_client({})):
             with pytest.raises(ValueError, match="json_schema_validation_failed"):
@@ -272,7 +272,7 @@ class TestAnthropicProviderJsonGenerate:
 
 class TestAnthropicProviderGenerate:
     def test_generate_returns_content_text_stripped(self):
-        from providers.anthropic_provider import AnthropicProvider
+        from src.providers.anthropic_provider import AnthropicProvider
         content_block = MagicMock()
         content_block.text = "  hello world  "
         mock_response = MagicMock()
@@ -303,7 +303,7 @@ class TestOpenAICompatibleProvider:
         return mock_client
 
     def test_generate_returns_content(self):
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
         message = MagicMock()
         message.content = "  hi there  "
         choice = MagicMock()
@@ -319,7 +319,7 @@ class TestOpenAICompatibleProvider:
             assert provider.generate("openai/gpt-oss-20b", "ping") == "hi there"
 
     def test_json_generate_validates(self, valid_analysis_json):
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
         provider = OpenAICompatibleProvider(
             api_key="gsk-test", base_url="https://api.groq.com/openai/v1"
         )
@@ -335,7 +335,7 @@ class TestOpenAICompatibleProvider:
         AnalysisOutput.model_validate(result)
 
     def test_json_generate_empty_raises(self):
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
         provider = OpenAICompatibleProvider(
             api_key="gsk-test", base_url="https://api.groq.com/openai/v1"
         )
@@ -351,7 +351,7 @@ class TestOpenAICompatibleProvider:
     def test_json_generate_recovers_failed_generation(self, valid_analysis_json):
         # GateGuard: callers pytest. Affected API: json_generate recovery.
         # Data schemas: AnalysisOutput. User: terminal Groq 401 / draft fail.
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
 
         class FakeAPIError(Exception):
             def __init__(self, body):
@@ -380,7 +380,7 @@ class TestOpenAICompatibleProvider:
         AnalysisOutput.model_validate(result)
 
     def test_json_generate_accepts_content_json(self, valid_analysis_json):
-        from providers.openai_compatible_provider import OpenAICompatibleProvider
+        from src.providers.openai_compatible_provider import OpenAICompatibleProvider
 
         message = MagicMock()
         message.tool_calls = []
@@ -409,7 +409,7 @@ def test_load_config_defaults(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "ollama")
     monkeypatch.setenv("ALLOW_CLOUD_LLM", "false")
     monkeypatch.delenv("OPENAI_COMPATIBLE_GENERATOR_MODEL", raising=False)
-    from config import Config
+    from src.config import Config
     cfg = Config()
     assert cfg.llm_backend == "ollama"
     assert cfg.trace_include_text is False
@@ -421,7 +421,7 @@ def test_load_config_defaults(monkeypatch):
 
 
 def test_config_anthropic_requires_allow_cloud_llm_in_production(monkeypatch):
-    from config import Config
+    from src.config import Config
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("LLM_BACKEND", "anthropic")
     monkeypatch.setenv("ALLOW_CLOUD_LLM", "false")
@@ -430,7 +430,7 @@ def test_config_anthropic_requires_allow_cloud_llm_in_production(monkeypatch):
 
 
 def test_config_openai_compatible_requires_allow_cloud_llm_in_production(monkeypatch):
-    from config import Config
+    from src.config import Config
     monkeypatch.setenv("ENV", "production")
     monkeypatch.setenv("LLM_BACKEND", "openai_compatible")
     monkeypatch.setenv("ALLOW_CLOUD_LLM", "false")
@@ -439,7 +439,7 @@ def test_config_openai_compatible_requires_allow_cloud_llm_in_production(monkeyp
 
 
 def test_scrub_trace_payload_removes_sensitive_keys():
-    from service.tracing import scrub_trace_payload
+    from src.service.tracing import scrub_trace_payload
     payload = {
         "text": "private journal entry",
         "context": "retrieved context",

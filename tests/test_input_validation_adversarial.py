@@ -9,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 
 
 @pytest.fixture
@@ -103,7 +103,7 @@ class TestHeldValidation:
         """
         import inspect
 
-        import app as app_module_for_source
+        import src.app as app_module_for_source
 
         source = inspect.getsource(app_module_for_source)
         assert "app.run(debug=True)" not in source

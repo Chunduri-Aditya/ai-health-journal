@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 
 
 # ── Distress detection ─────────────────────────────────────────────────────

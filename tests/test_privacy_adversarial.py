@@ -12,9 +12,9 @@ from unittest import mock
 
 import pytest
 
-import app
+import src.app as app
 from src.config import load_config
-from privacy.redact import redact
+from src.privacy.redact import redact
 
 
 def _decode_session_cookie(cookie_value: str) -> str:
@@ -40,7 +40,7 @@ def _decode_session_cookie(cookie_value: str) -> str:
 # ── Held: cloud gates never read credentials while closed ──────────────────
 class TestCloudGatesFailClosed:
     def test_llm_gate_never_reads_anthropic_key_when_backend_is_ollama(self, monkeypatch):
-        from providers.factory import get_llm_provider
+        from src.providers.factory import get_llm_provider
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-CANARY-SHOULD-NEVER-BE-READ")
         cfg = load_config().model_copy(
@@ -62,7 +62,7 @@ class TestCloudGatesFailClosed:
         assert calls == []
 
     def test_llm_gate_never_reads_anthropic_key_when_allow_cloud_llm_false(self, monkeypatch):
-        from providers.factory import get_llm_provider
+        from src.providers.factory import get_llm_provider
 
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-CANARY-SHOULD-NEVER-BE-READ")
         cfg = load_config().model_copy(
@@ -84,7 +84,7 @@ class TestCloudGatesFailClosed:
         assert calls == []
 
     def test_pinecone_gate_raises_rather_than_silently_connecting(self):
-        from vector_store.factory import get_vector_store
+        from src.vector_store.factory import get_vector_store
 
         cfg = load_config().model_copy(
             update={
@@ -93,7 +93,7 @@ class TestCloudGatesFailClosed:
                 "allow_cloud_vectorstore": False,
             },
                     )
-        with mock.patch("vector_store.factory.load_config", return_value=cfg):
+        with mock.patch("src.vector_store.factory.load_config", return_value=cfg):
             with pytest.raises(RuntimeError, match="cloud_vectorstore_not_enabled"):
                 get_vector_store()
 

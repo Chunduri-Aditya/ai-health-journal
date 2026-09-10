@@ -40,10 +40,10 @@ def _run_scenario(scenario: Dict[str, Any], persist_dir: str) -> Dict[str, Any]:
     os.environ["RETRIEVAL_ENABLED"] = "true"
     os.environ["VECTOR_BACKEND"] = "chroma"
 
-    import app as app_module
+    import src.app as app_module
     from tests.support.fake_provider import ThemeAwareFakeProvider
     from tests.support.scenarios import resolve_source_ids
-    from vector_store.chroma_store import ChromaStore
+    from src.vector_store.chroma_store import ChromaStore
 
     store = ChromaStore(default_namespace=f"scenario_{scenario['suite_id']}")
     app_module.vector_store = store

@@ -13,6 +13,9 @@
 #   ./start.sh --check         run preflight + setup but DO NOT launch the app
 #   ./start.sh --help
 #
+# After launch, start.sh always runs a startup smoke (Flask POST /analyze or
+# FastAPI smoke_service) and exits if Reflect/API is broken (e.g. bad Groq key).
+#
 # Behavior:
 #   1. Verifies Python 3.8+, Ollama binary, and the Ollama daemon.
 #      If the daemon isn't running, tries to start it in the background
@@ -80,7 +83,13 @@ section() { printf "\n%s── %s ──%s\n" "$C_DIM" "$1" "$C_OFF"; }
 
 # ── Cleanup hook ─────────────────────────────────────────────────────────────
 OLLAMA_PID=""
+APP_PID=""
 cleanup() {
+  if [ -n "${APP_PID}" ] && kill -0 "${APP_PID}" 2>/dev/null; then
+    say "Stopping app (pid ${APP_PID})…"
+    kill "${APP_PID}" 2>/dev/null || true
+    wait "${APP_PID}" 2>/dev/null || true
+  fi
   if [ -n "${OLLAMA_PID}" ] && kill -0 "${OLLAMA_PID}" 2>/dev/null; then
     say "Stopping Ollama daemon we started (pid ${OLLAMA_PID})…"
     kill "${OLLAMA_PID}" 2>/dev/null || true
@@ -297,28 +306,68 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   exit 0
 fi
 
-if [ "$RUN_SERVICE" -eq 1 ]; then
-  ok "Starting FastAPI service — API at ${HOST_URL} (try ${HOST_URL}/docs or ${HOST_URL}/readyz)"
-  ok "Flask lab UI (optional): ./start.sh  →  http://127.0.0.1:${FLASK_PORT}"
-else
-  ok "Starting Flask app — open ${HOST_URL} in your browser"
-fi
-say "Press Ctrl+C to stop."
-echo
+wait_http() {
+  local url="$1"
+  local label="$2"
+  local i
+  for i in $(seq 1 60); do
+    if curl -fsS --max-time 2 "$url" >/dev/null 2>&1; then
+      ok "${label} is up"
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
 
-# Keep ourselves in the cleanup trap by NOT using exec when we started the
-# daemon, so the trap can kill it on Ctrl+C.
+section "Launch + startup smoke"
+
+# Avoid macOS double-bind confusion (0.0.0.0:* and 127.0.0.1:PORT both
+# accepting traffic — curl hits the wrong process and Reflect looks broken).
+free_port() {
+  local port="$1"
+  local pids
+  pids="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null || true)"
+  if [ -n "$pids" ]; then
+    warn "Port ${port} already in use — stopping prior listener(s): ${pids}"
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    sleep 0.5
+  fi
+}
+
+# Always start in the background so we can smoke-test Reflect/API before
+# handing the terminal to the long-running server.
 if [ "$RUN_SERVICE" -eq 1 ]; then
-  if [ -n "$OLLAMA_PID" ]; then
-    "$VENV_DIR/bin/uvicorn" src.service.main:app --host 127.0.0.1 --port 8080
-  else
-    exec "$VENV_DIR/bin/uvicorn" src.service.main:app --host 127.0.0.1 --port 8080
+  free_port 8080
+  ok "Starting FastAPI service — API at ${HOST_URL}"
+  "$VENV_DIR/bin/uvicorn" src.service.main:app --host 127.0.0.1 --port 8080 &
+  APP_PID=$!
+  if ! wait_http "${HOST_URL}/readyz" "FastAPI /readyz"; then
+    die "Service failed to become ready. Check logs above / .env (DATABASE_URL, LLM keys)."
+  fi
+  say "Running service smoke (ingest/invoke)…"
+  if ! JOURNAL_AGENT_URL="${HOST_URL}" "$VENV_PY" scripts/smoke_service.py; then
+    die "Startup smoke failed. Fix the API (key/backend) before Reflect will work."
   fi
 else
-  if [ -n "$OLLAMA_PID" ]; then
-    "$VENV_PY" app.py
-  else
-    # Nothing to clean up — exec for a tidier process tree.
-    exec "$VENV_PY" app.py
+  free_port "${FLASK_PORT}"
+  ok "Starting Flask app — open ${HOST_URL} in your browser"
+  "$VENV_PY" -m src.app &
+  APP_PID=$!
+  if ! wait_http "${HOST_URL}/ping" "Flask /ping"; then
+    die "Flask failed to become ready on ${HOST_URL}."
+  fi
+  say "Running Flask smoke (POST /analyze) — this is the Reflect button path…"
+  if ! JOURNAL_FLASK_URL="${HOST_URL}" "$VENV_PY" scripts/smoke_flask.py; then
+    die "Startup smoke failed. Reflect will show 'That didn't come through' until this passes.
+    Common fix: refresh OPENAI_COMPATIBLE_API_KEY in .env (Groq 401),
+    or set LLM_BACKEND=ollama with a local model pulled."
   fi
 fi
+
+ok "Startup smoke passed — Reflect/API is reachable"
+say "App running at ${HOST_URL} (pid ${APP_PID}). Press Ctrl+C to stop."
+echo
+wait "${APP_PID}"
+APP_PID=""

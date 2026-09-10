@@ -61,8 +61,8 @@ _provider = get_llm_provider(cfg)
 
 def _active_role_models() -> RoleModels:
     """Cloud roles only when the constructed provider is a cloud backend."""
-    from providers.anthropic_provider import AnthropicProvider
-    from providers.openai_compatible_provider import OpenAICompatibleProvider
+    from .providers.anthropic_provider import AnthropicProvider
+    from .providers.openai_compatible_provider import OpenAICompatibleProvider
 
     if isinstance(_provider, (AnthropicProvider, OpenAICompatibleProvider)):
         return resolve_role_models(cfg)
@@ -374,7 +374,7 @@ def analyze_entry():
     # GateGuard: relevance check before burning generator/verifier/fallback TPM.
     if getattr(cfg, "journal_relevance_gate", True):
         # Heuristics always; LLM only on cloud path (prompt-role / 20B).
-        from providers.roles import is_cloud_llm_active
+        from .providers.roles import is_cloud_llm_active
 
         use_llm = is_cloud_llm_active(cfg)
         verdict = classify_journal_relevance(
@@ -449,6 +449,14 @@ def analyze_entry():
 
     except ValueError as e:
         err = str(e)
+        if err.startswith("llm_auth_failed:"):
+            logging.error("LLM auth failure in /analyze: %s", err)
+            return jsonify({
+                "error": (
+                    "The cloud LLM API key was rejected. "
+                    "Update OPENAI_COMPATIBLE_API_KEY in .env, or set LLM_BACKEND=ollama."
+                )
+            }), 502
         if "json_parse_failed" in err:
             # The internal stage tag (e.g. "json_parse_failed:stage=draft")
             # is logged for debugging but never returned to the client --
@@ -701,8 +709,13 @@ def _run_quality_pipeline(
             validator_model=AnalysisOutput,
         )
     except Exception as e:
-        logging.error(f"Draft generation failed: {type(e).__name__}")
-        raise ValueError("json_parse_failed:stage=draft")
+        logging.error(f"Draft generation failed: {type(e).__name__}: {e}")
+        msg = str(e).lower()
+        if "401" in msg or "invalid api key" in msg or "unauthorized" in msg:
+            raise ValueError(
+                "llm_auth_failed: cloud API key rejected (check OPENAI_COMPATIBLE_API_KEY)"
+            ) from e
+        raise ValueError("json_parse_failed:stage=draft") from e
 
     draft_json = _strip_ungrounded_quotes(draft_json, journal_entry)
 

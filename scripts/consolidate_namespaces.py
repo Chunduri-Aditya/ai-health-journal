@@ -126,7 +126,7 @@ def main() -> int:
 
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-    from config import load_config
+    from src.config import load_config
 
     cfg = load_config()
     default_source = os.getenv("CHROMA_PERSIST_DIR", "./storage/chroma")
@@ -219,7 +219,7 @@ def main() -> int:
         # the merged collection being rebuilt under the wrong embedder. Text
         # survives that perfectly, so a text-only check reports success on a
         # store whose vectors have all silently changed model.
-        from vector_store.embeddings import expected_dimension
+        from src.vector_store.embeddings import expected_dimension
 
         want_dim = expected_dimension(
             (cfg.embedding_backend or "default").lower(), cfg.ollama_embed_model

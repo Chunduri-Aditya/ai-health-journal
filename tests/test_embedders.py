@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from vector_store.embedders import HashEmbedder, build_embedder
+from src.vector_store.embedders import HashEmbedder, build_embedder
 
 os.environ.setdefault("ENV", "test")
 os.environ.setdefault("ALLOW_HASH_EMBEDDER", "true")

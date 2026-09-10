@@ -1,4 +1,6 @@
 # Local Journal Agent (Agentic RAG) stack: Postgres+pgvector + FastAPI service
+# GateGuard: callers docker compose up. Affected API: host Ollama via OLLAMA_BASE_URL.
+# Data schemas: none. User: Implement the plan as specified. Do NOT edit the plan file.
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -22,6 +24,8 @@ services:
       dockerfile: Dockerfile.service
     ports:
       - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DATABASE_URL: postgresql://journal:journal@db:5432/journal
       RETRIEVAL_ENABLED: "true"
@@ -33,6 +37,7 @@ services:
       CHUNK_OVERLAP: "80"
       LLM_BACKEND: ollama
       ALLOW_CLOUD_LLM: "false"
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
       ENV: dev
       RAG_NAMESPACE_MODE: fixed
       RAG_NAMESPACE_FIXED: ai-health-journal

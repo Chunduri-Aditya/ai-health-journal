@@ -15,16 +15,16 @@ import logging
 import re
 from typing import Any, Dict, Literal, Optional
 
-from .config import load_config
-from .providers.factory import get_llm_provider
-from .vector_store.base import VectorStore
-from .vector_store.factory import get_vector_store
+from ..config import load_config
+from ..providers.factory import get_llm_provider
+from ..vector_store.base import VectorStore
+from ..vector_store.factory import get_vector_store
 
-from .agent.confirmation import is_confirmation, is_denial
-from .agent.intent import classify_intent
-from .agent.state import AgentState
-from .agent.respond import generate_grounded_response
-from .agent.tools import (
+from .confirmation import is_confirmation, is_denial
+from .intent import classify_intent
+from .state import AgentState
+from .respond import generate_grounded_response
+from .tools import (
     tool_apply_write,
     tool_propose_write,
     tool_query_metadata,

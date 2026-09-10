@@ -66,7 +66,7 @@ def main() -> int:
     parser.add_argument("--json-out", type=Path, default=None)
     args = parser.parse_args()
 
-    from app import _is_crisis, _is_distressed
+    from src.app import _is_crisis, _is_distressed
 
     with args.cases.open(encoding="utf-8") as handle:
         cases = json.load(handle)["cases"]

@@ -12,8 +12,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from .providers.base import LLMProvider
-from safety import (
+from ..providers.base import LLMProvider
+from ..safety import (
     CRISIS_SUPPORT_MESSAGE,
     is_crisis,
     strip_harsh_text,
@@ -147,7 +147,7 @@ def build_revision_user_prompt(
 
 def _roles(cfg) -> tuple[str, str, str]:
     """Return (generator, verifier, fallback) model names for the active backend."""
-    from providers.roles import resolve_role_models
+    from ..providers.roles import resolve_role_models
 
     roles = resolve_role_models(cfg)
     return roles.generator, roles.verifier, roles.fallback

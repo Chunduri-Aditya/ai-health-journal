@@ -27,7 +27,7 @@ setup-dev:
 	. $(VENV)/bin/activate && pip install -U pip && pip install -r requirements-dev.txt
 
 run:
-	. $(VENV)/bin/activate && $(PY) app.py
+	. $(VENV)/bin/activate && $(PY) -m src.app
 
 test:
 	. $(VENV)/bin/activate && CHROMA_PERSIST_DIR=$(EVAL_CHROMA_DIR) pytest

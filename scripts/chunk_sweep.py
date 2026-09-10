@@ -20,9 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from vector_store.chunking import ChunkingConfig
-from vector_store.embedders import build_embedder
-from vector_store.pgvector_store import PgVectorStore
+from src.vector_store.chunking import ChunkingConfig
+from src.vector_store.embedders import build_embedder
+from src.vector_store.pgvector_store import PgVectorStore
 
 
 def load_queries(path: Path):

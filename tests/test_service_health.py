@@ -17,7 +17,7 @@ os.environ["ALLOW_CLOUD_LLM"] = "false"
 @pytest.fixture
 def client():
     from fastapi.testclient import TestClient
-    from service.main import app
+    from src.service.main import app
 
     return TestClient(app)
 
@@ -46,7 +46,7 @@ def test_root_landing(client):
 
 def test_api_key_required_outside_dev(monkeypatch):
     """ENV=production without JOURNAL_AGENT_API_KEY → 503 on /v1 routes."""
-    import service.main as svc
+    import src.service.main as svc
     from fastapi.testclient import TestClient
 
     monkeypatch.setenv("ENV", "production")
@@ -61,7 +61,7 @@ def test_api_key_required_outside_dev(monkeypatch):
 
 
 def test_api_key_rejects_wrong_key(monkeypatch):
-    import service.main as svc
+    import src.service.main as svc
     from fastapi.testclient import TestClient
 
     monkeypatch.setenv("ENV", "production")

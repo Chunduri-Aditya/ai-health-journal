@@ -51,7 +51,7 @@ def main() -> int:
     os.environ["CHROMA_PERSIST_DIR"] = tmp_dir
     namespace = "rag_eval"
 
-    from vector_store.chroma_store import ChromaStore
+    from src.vector_store.chroma_store import ChromaStore
 
     store = ChromaStore(default_namespace=namespace)
     try:

@@ -24,19 +24,19 @@ import inspect
 import re
 
 from src.generator_prompts import DRAFT_SYSTEM_PROMPT
-from schemas.analysis import AnalysisOutput
+from src.schemas.analysis import AnalysisOutput
 
 
 def _baseline_source() -> str:
     # Import here so app.py import happens at test-collection time only
     # when this test actually runs (keeps collection cheap).
-    import app  # noqa: WPS433
+    import src.app as app  # noqa: WPS433
 
     return inspect.getsource(app._run_baseline)
 
 
 def _quality_source() -> str:
-    import app  # noqa: WPS433
+    import src.app as app  # noqa: WPS433
 
     return inspect.getsource(app._run_quality_pipeline)
 

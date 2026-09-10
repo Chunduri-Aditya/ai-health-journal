@@ -15,7 +15,7 @@ import tempfile
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 from tests.support.fake_provider import ThemeAwareFakeProvider
 from tests.support.scenarios import (
     SCENARIO_DIR,
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.slow
 @pytest.fixture
 def chroma_convo(monkeypatch):
     """Test client backed by a real, ephemeral Chroma store + the fake provider."""
-    from vector_store.chroma_store import ChromaStore
+    from src.vector_store.chroma_store import ChromaStore
 
     with tempfile.TemporaryDirectory() as tmp:
         monkeypatch.setenv("CHROMA_PERSIST_DIR", tmp)

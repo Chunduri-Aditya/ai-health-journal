@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_store.chunking import ChunkingConfig, chunk_text
+from src.vector_store.chunking import ChunkingConfig, chunk_text
 
 
 class TestChunkText:

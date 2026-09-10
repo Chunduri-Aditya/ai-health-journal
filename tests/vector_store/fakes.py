@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from vector_store.base import RetrievalHit, VectorStore
+from src.vector_store.base import RetrievalHit, VectorStore
 
 
 def _tokens(text: str) -> set:

@@ -235,9 +235,9 @@ def write_to_chroma(chunks: List[Chunk], namespace: str) -> int:
 
     load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-    from config import load_config
-    from vector_store.embeddings import build_embedding_function
-    from vector_store.chroma_store import ChromaStore
+    from src.config import load_config
+    from src.vector_store.embeddings import build_embedding_function
+    from src.vector_store.chroma_store import ChromaStore
 
     cfg = load_config()
     store = ChromaStore(embedding_function=build_embedding_function(cfg))

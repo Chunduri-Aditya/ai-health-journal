@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from vector_store.base import RetrievalHit, format_hits_as_context
+from src.vector_store.base import RetrievalHit, format_hits_as_context
 from tests.vector_store.fakes import InMemoryVectorStore
 
 

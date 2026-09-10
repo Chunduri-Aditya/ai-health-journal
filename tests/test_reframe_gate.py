@@ -5,7 +5,7 @@ the positivity/reframe path fire on a self-harm entry, and must fail closed when
 the verifier misses or errors. These tests exercise that boundary with no LLM.
 """
 
-from app import CRISIS_SUPPORT_MESSAGE, _apply_reframe_gate, _is_crisis
+from src.app import CRISIS_SUPPORT_MESSAGE, _apply_reframe_gate, _is_crisis
 
 
 def _draft(reframe: str = "You did your best today.") -> dict:

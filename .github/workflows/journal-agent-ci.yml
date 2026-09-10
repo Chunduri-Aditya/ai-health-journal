@@ -21,7 +21,7 @@ jobs:
           pip install -U pip
           pip install -r requirements-service.txt -r requirements-dev.txt
       - name: Ruff
-        run: ruff check agent service vector_store providers config.py
+        run: ruff check src
       - name: Unit tests (full default suite)
         env:
           ENV: test
@@ -60,6 +60,7 @@ jobs:
       - name: Retrieval + injection smoke against live agent
         env:
           JOURNAL_AGENT_URL: ${{ vars.JOURNAL_AGENT_URL }}
+          JOURNAL_AGENT_API_KEY: ${{ secrets.JOURNAL_AGENT_API_KEY }}
           ASR_MAX: "0.25"
           PRECISION_MIN: "0.5"
         run: python scripts/live_agent_eval.py

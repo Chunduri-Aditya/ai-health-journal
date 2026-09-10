@@ -10,7 +10,8 @@ import requests
 from .config import Config
 from .system_profile import SystemProfile, detect_system_profile
 
-OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+_OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_TAGS_URL = f"{_OLLAMA_BASE}/api/tags"
 OLLAMA_TIMEOUT_SECONDS = 1.5
 _CACHE_TTL_SECONDS = 15.0
 

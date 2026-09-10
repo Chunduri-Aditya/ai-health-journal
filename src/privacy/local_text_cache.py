@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional, Tuple
 
-from .config import load_config
+from ..config import load_config
 
 _CFG = load_config()
 

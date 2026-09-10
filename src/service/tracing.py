@@ -35,7 +35,7 @@ def _trace_include_text() -> bool:
     if os.getenv("TRACE_INCLUDE_TEXT", "false").lower() == "true":
         return True
     try:
-        from config import load_config
+        from ..config import load_config
 
         return load_config().trace_include_text
     except Exception:  # noqa: BLE001

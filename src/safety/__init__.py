@@ -3,17 +3,17 @@
 
 from __future__ import annotations
 
-from .safety.crisis import (
+from .crisis import (
     CRISIS_SUPPORT_MESSAGE,
     DISTRESS_STEADYING_MESSAGE,
     is_crisis,
     is_distress,
 )
-from .safety.grounding import strip_ungrounded_quotes
-from .safety.tone import strip_harsh_text
+from .grounding import strip_ungrounded_quotes
+from .tone import strip_harsh_text
 
 # Re-export redact from privacy
-from .privacy.redact import redact
+from ..privacy.redact import redact
 
 __all__ = [
     "CRISIS_SUPPORT_MESSAGE",

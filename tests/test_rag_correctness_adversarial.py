@@ -11,10 +11,10 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
-import app as app_module
-from schemas.analysis import AnalysisOutput
-from schemas.verifier import VerifierVerdict
-from vector_store.chroma_store import ChromaStore
+import src.app as app_module
+from src.schemas.analysis import AnalysisOutput
+from src.schemas.verifier import VerifierVerdict
+from src.vector_store.chroma_store import ChromaStore
 
 
 @pytest.fixture

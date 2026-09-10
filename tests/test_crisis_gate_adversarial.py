@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from app import _apply_reframe_gate, _is_crisis
+from src.app import _apply_reframe_gate, _is_crisis
 
 _TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "index.html"
 
@@ -240,7 +240,7 @@ def test_blank_crisis_message_env_var_falls_back_to_default(monkeypatch):
     """
     import importlib
 
-    import app as app_module
+    import src.app as app_module
 
     monkeypatch.setenv("AIHJ_CRISIS_MESSAGE", "")
     try:
@@ -258,14 +258,14 @@ def test_apply_reframe_gate_has_no_independent_defense_for_blank_message():
     fix above. Documents that this is a single point of correctness, in case
     a future refactor ever bypasses the module-level constant.
     """
-    from app import _apply_reframe_gate
+    from src.app import _apply_reframe_gate
 
     draft = {"reframe": "Stay positive!", "crisis_support": False, "support_message": ""}
     verdict = {"crisis_detected": True, "safety_flags": []}
     out = _apply_reframe_gate(dict(draft), "I want to kill myself.", verdict)
     # CRISIS_SUPPORT_MESSAGE is non-empty (verified above), so this real
     # module state IS correctly non-silent -- confirming the gate uses it.
-    from app import CRISIS_SUPPORT_MESSAGE
+    from src.app import CRISIS_SUPPORT_MESSAGE
 
     assert out["support_message"] == CRISIS_SUPPORT_MESSAGE
     assert out["support_message"] != ""

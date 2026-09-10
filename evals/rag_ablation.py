@@ -141,7 +141,7 @@ def main() -> int:
     os.environ["CHROMA_PERSIST_DIR"] = tmp_dir
     namespace = "rag_ablation"
 
-    from vector_store.chroma_store import ChromaStore
+    from src.vector_store.chroma_store import ChromaStore
 
     store = ChromaStore(default_namespace=namespace)
     results: Dict[str, Dict[str, object]] = {}

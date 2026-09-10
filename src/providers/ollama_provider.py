@@ -29,7 +29,7 @@ class OllamaProvider(LLMProvider):
         temperature: Optional[float] = None,
         timeout: int = 30,
     ) -> str:
-        from llm_client import ollama_generate
+        from ..llm_client import ollama_generate
 
         return ollama_generate(
             model,
@@ -50,7 +50,7 @@ class OllamaProvider(LLMProvider):
         temperature: Optional[float] = None,
         validator_model: Optional[Type[T]] = None,
     ) -> Dict[str, Any]:
-        from llm_client import json_generate as _json_generate
+        from ..llm_client import json_generate as _json_generate
 
         return _json_generate(
             model,
@@ -63,6 +63,6 @@ class OllamaProvider(LLMProvider):
         )
 
     def healthcheck(self) -> bool:
-        from llm_client import check_ollama_available
+        from ..llm_client import check_ollama_available
 
         return check_ollama_available()

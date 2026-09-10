@@ -40,7 +40,7 @@ def smoke_store(persist_dir: str) -> None:
         CHROMA_PERSIST_DIR=persist_dir,
         RAG_NAMESPACE_MODE="session",
     )
-    from vector_store.factory import get_vector_store
+    from src.vector_store.factory import get_vector_store
 
     vs = get_vector_store()
     check("backend is chroma + enabled + healthy",
@@ -82,7 +82,7 @@ def smoke_store(persist_dir: str) -> None:
 
 def smoke_route() -> None:
     """Route-level: /analyze must return a `sources` list. LLM is mocked."""
-    import app as app_module
+    import src.app as app_module
 
     fixed = {
         "summary": "You feel guilty about avoiding your thesis.",

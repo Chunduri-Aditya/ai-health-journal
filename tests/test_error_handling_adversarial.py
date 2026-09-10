@@ -12,7 +12,7 @@ from unittest import mock
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 
 
 @pytest.fixture

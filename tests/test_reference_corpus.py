@@ -17,7 +17,7 @@ import inspect
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 from tests.support.fake_vector_store import InMemoryVectorStore
 
 

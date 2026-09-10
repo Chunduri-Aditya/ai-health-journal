@@ -6,6 +6,7 @@ Enhanced with JSON schema enforcement for reliable parsing.
 import requests
 import json
 import logging
+import os
 import re
 from typing import Any, Dict, Optional, Type, TypeVar, Union
 
@@ -13,7 +14,8 @@ from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
+_OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_API_URL = f"{_OLLAMA_BASE}/api/generate"
 TIMEOUT_SECONDS = 30
 
 # JSON schemas for structured outputs
@@ -292,7 +294,7 @@ def json_generate(
 def check_ollama_available() -> bool:
     """Check if Ollama is running."""
     try:
-        response = requests.get("http://localhost:11434", timeout=2)
+        response = requests.get(_OLLAMA_BASE, timeout=2)
         return response.status_code == 200
     except requests.exceptions.RequestException:
         return False

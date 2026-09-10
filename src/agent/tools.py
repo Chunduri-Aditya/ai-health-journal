@@ -11,12 +11,12 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from .vector_store.base import VectorStore, format_hits_as_context
-from .vector_store.pgvector_store import PgVectorStore
+from ..vector_store.base import VectorStore, format_hits_as_context
+from ..vector_store.pgvector_store import PgVectorStore
 
-from .config import load_config
-from .privacy.redact import redact
-from .agent.confirmation import build_pending_write
+from ..config import load_config
+from ..privacy.redact import redact
+from .confirmation import build_pending_write
 
 logger = logging.getLogger(__name__)
 

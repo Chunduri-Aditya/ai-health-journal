@@ -31,11 +31,11 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from .config import load_config
-from safety import redact
-from .providers.factory import get_llm_provider
-from .service.tracing import trace_agent_run
-from .vector_store.factory import get_vector_store
+from ..config import load_config
+from ..safety import redact
+from ..providers.factory import get_llm_provider
+from .tracing import trace_agent_run
+from ..vector_store.factory import get_vector_store
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("journal_agent")
@@ -394,7 +394,7 @@ def ingest(req: IngestRequest, _: None = Depends(_require_api_key)):
 @app.post("/v1/agent/invoke", response_model=AgentInvokeResponse)
 def agent_invoke(req: AgentInvokeRequest, _: None = Depends(_require_api_key)):
     cfg = load_config()
-    from agent.graph import run_agent_turn
+    from ..agent.graph import run_agent_turn
 
     prior = _load_session(req.session_id)
     namespace = _fixed_namespace(req.namespace)
@@ -434,7 +434,7 @@ def agent_invoke(req: AgentInvokeRequest, _: None = Depends(_require_api_key)):
 async def agent_stream(req: AgentInvokeRequest, _: None = Depends(_require_api_key)):
     """SSE stream: tool events first, then a final response event."""
     cfg = load_config()
-    from agent.graph import run_agent_turn
+    from ..agent.graph import run_agent_turn
 
     prior = _load_session(req.session_id)
     namespace = _fixed_namespace(req.namespace)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module
+import src.app as app_module
 from tests.support.fake_provider import ThemeAwareFakeProvider
 from tests.support.fake_vector_store import InMemoryVectorStore
 from tests.support.scenarios import load_scenario

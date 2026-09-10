@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Literal
 
-from .providers.base import LLMProvider
-from .providers.roles import resolve_role_models
+from ..providers.base import LLMProvider
+from ..providers.roles import resolve_role_models
 
 logger = logging.getLogger(__name__)
 

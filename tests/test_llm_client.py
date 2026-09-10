@@ -19,8 +19,8 @@ from src.llm_client import (
     extract_json_substring,
     json_generate,
 )
-from schemas.analysis import AnalysisOutput
-from schemas.verifier import VerifierVerdict
+from src.schemas.analysis import AnalysisOutput
+from src.schemas.verifier import VerifierVerdict
 
 
 def _queue_responses(monkeypatch, responses: List[str]) -> List[str]:
