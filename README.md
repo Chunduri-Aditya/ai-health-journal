@@ -357,7 +357,7 @@ make run  # Activates venv and runs python -m src.app
 
 ### Screenshots / Demo
 
-![Journal Agent notebook UI](docs/screenshot.png)
+![Journal Agent notebook UI](docs/ui-notebook.png)
 
 *Flask lab UI on `:5050`: quiet writing sheet, recent entries rail, and a Reflection panel after Draft → Verify → Refine (emotions, suggestions, grounded quotes).*
 
@@ -1107,7 +1107,7 @@ ai-health-journal/
 ├── evals/                    # Offline + live evaluation harness
 ├── scripts/                  # start helpers, smoke_flask, smoke_service, …
 ├── tests/                    # Unit / adversarial / contract tests
-├── docs/                     # Design + screenshot.png
+├── docs/                     # Design + ui-notebook.png
 ├── start.sh                  # One-shot launcher + startup smoke
 ├── Dockerfile.service        # FastAPI container (uvicorn src.service.main:app)
 ├── docker-compose.yml        # Local pgvector + API (host Ollama via OLLAMA_BASE_URL)
